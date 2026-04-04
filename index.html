@@ -75,12 +75,13 @@
     body { background: #000; }
     #game-container { flex-direction: row; width: 100vw; height: 100vh; }
     canvas { border: none; }
-    #mobile-controls { display: flex; position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 20; }
+    #mobile-controls { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 20; }
     .touch-zone { pointer-events: auto; position: absolute; top: 0; height: 100%; display: flex; justify-content: center; align-items: center; }
-    .touch-zone-left { left: 0; width: 120px; background: rgba(0,0,0,0.85); }
+    .touch-zone-left { left: 0; width: 120px; background: rgba(0,0,0,0.85); flex-direction: column; gap: 10px; }
     .touch-zone-right { right: 0; width: 120px; background: rgba(0,0,0,0.85); }
-    #whip-btn { width: 70px; height: 70px; border-radius: 50%; background: linear-gradient(to bottom, #6a5a3a, #3a2a14); border: 2px solid #8a7a50; color: #f0e8d0; font-family: Arial; font-weight: bold; font-size: 12px; text-transform: uppercase; cursor: pointer; display: flex; justify-content: center; align-items: center; box-shadow: inset 0 1px 0 rgba(255,255,200,0.2), 0 2px 6px rgba(0,0,0,0.5); touch-action: none; user-select: none; -webkit-user-select: none; }
-    #whip-btn:active { background: linear-gradient(to bottom, #3a2a14, #4a3a20); }
+    .mobile-action-btn { width: 70px; height: 50px; border-radius: 8px; background: linear-gradient(to bottom, #6a5a3a, #3a2a14); border: 2px solid #8a7a50; color: #f0e8d0; font-family: Arial; font-weight: bold; font-size: 11px; text-transform: uppercase; cursor: pointer; display: flex; justify-content: center; align-items: center; box-shadow: inset 0 1px 0 rgba(255,255,200,0.2), 0 2px 6px rgba(0,0,0,0.5); touch-action: none; user-select: none; -webkit-user-select: none; }
+    .mobile-action-btn:active { background: linear-gradient(to bottom, #3a2a14, #4a3a20); }
+    .mobile-circle-btn { width: 70px; height: 70px; border-radius: 50%; }
     #joystick-area { width: 100px; height: 100px; position: relative; touch-action: none; user-select: none; -webkit-user-select: none; }
     #joystick-base { width: 100px; height: 100px; border-radius: 50%; background: rgba(255,255,255,0.08); border: 2px solid rgba(138,122,80,0.5); position: absolute; top: 0; left: 0; }
     #joystick-thumb { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(to bottom, #6a5a3a, #3a2a14); border: 2px solid #8a7a50; position: absolute; top: 30px; left: 30px; box-shadow: 0 2px 6px rgba(0,0,0,0.5); }
@@ -105,7 +106,9 @@
 </div>
 <div id="mobile-controls">
   <div class="touch-zone touch-zone-left">
-    <button id="whip-btn">WHIP</button>
+    <button id="cycle-btn" class="mobile-action-btn">ITEM</button>
+    <button id="use-btn" class="mobile-action-btn">USE</button>
+    <button id="whip-btn" class="mobile-action-btn mobile-circle-btn">WHIP</button>
   </div>
   <div class="touch-zone touch-zone-right">
     <div id="joystick-area">
@@ -3685,7 +3688,7 @@ function draw() {
 
   if (!inMainMenu) {
   // Player
-  let playerMoving = keys['ArrowLeft'] || keys['a'] || keys['A'] || keys['ArrowRight'] || keys['d'] || keys['D'] || keys['ArrowUp'] || keys['w'] || keys['W'] || keys['ArrowDown'] || keys['s'] || keys['S'];
+  let playerMoving = keys['ArrowLeft'] || keys['a'] || keys['A'] || keys['ArrowRight'] || keys['d'] || keys['D'] || keys['ArrowUp'] || keys['w'] || keys['W'] || keys['ArrowDown'] || keys['s'] || keys['S'] || touchJoystick.active;
   // Flash when hurt
   if (player.hurtTimer > 0 && Math.floor(player.hurtTimer / 4) % 2 === 0) {
     ctx.globalAlpha = 0.4;
@@ -4359,6 +4362,7 @@ document.getElementById('save-btn').addEventListener('click', () => {
   document.getElementById('pause-btn').style.display = 'none';
   document.getElementById('fs-btn').style.display = 'none';
   document.getElementById('save-btn').style.display = 'none';
+  document.getElementById('mobile-controls').style.display = 'none';
 });
 
 // Save loading now handled by main menu Continue button
@@ -4672,6 +4676,7 @@ canvas.addEventListener('click', function mainMenuClick(e) {
     document.getElementById('pause-btn').style.display = '';
     document.getElementById('fs-btn').style.display = '';
     document.getElementById('save-btn').style.display = '';
+    if (isMobile) document.getElementById('mobile-controls').style.display = 'flex';
     return;
   }
 
@@ -4685,6 +4690,7 @@ canvas.addEventListener('click', function mainMenuClick(e) {
       document.getElementById('pause-btn').style.display = '';
       document.getElementById('fs-btn').style.display = '';
       document.getElementById('save-btn').style.display = '';
+      if (isMobile) document.getElementById('mobile-controls').style.display = 'flex';
       return;
     }
   }
@@ -4954,9 +4960,68 @@ if (isMobile) {
   whipBtn.addEventListener('touchstart', e => { e.preventDefault(); triggerWhip(); });
   whipBtn.addEventListener('mousedown', e => { e.preventDefault(); triggerWhip(); });
 
-  // Touch on canvas for clicking UI elements (quest NPCs, watchtower, etc.)
+  // Cycle item button
+  const cycleBtn = document.getElementById('cycle-btn');
+  function triggerCycleItem() {
+    // Find next slot that has an item, or wrap around
+    let start = inventory.selected;
+    for (let i = 1; i <= 5; i++) {
+      let idx = (start + i) % 5;
+      if (inventory.slots[idx] !== null) {
+        inventory.selected = idx;
+        notify(`Selected: ${ITEM_TYPES[inventory.slots[idx]].name}`);
+        return;
+      }
+    }
+    // No items, just cycle to next slot
+    inventory.selected = (inventory.selected + 1) % 5;
+  }
+  cycleBtn.addEventListener('touchstart', e => { e.preventDefault(); triggerCycleItem(); });
+  cycleBtn.addEventListener('mousedown', e => { e.preventDefault(); triggerCycleItem(); });
+
+  // Use item button
+  const useBtn = document.getElementById('use-btn');
+  function triggerUseItem() {
+    if (gameOver || paused) return;
+    let item = inventory.slots[inventory.selected];
+    if (!item) { notify('No item selected'); return; }
+    let used = false;
+    if (item === 'medkit') {
+      if (player.health < player.maxHealth) {
+        player.health = Math.min(player.maxHealth, player.health + 3);
+        notify('Used Medkit! +3 HP');
+        used = true;
+      }
+    } else if (item === 'food') {
+      if (player.health < player.maxHealth) {
+        player.health = Math.min(player.maxHealth, player.health + 1);
+        notify('Ate Food! +1 HP');
+        used = true;
+      }
+    } else if (item === 'speed') {
+      speedBoostTimer = 600;
+      notify('Speed Boost activated!');
+      used = true;
+    } else if (item === 'shield') {
+      shieldActive = true;
+      notify('Shield activated!');
+      used = true;
+    }
+    if (used) inventory.slots[inventory.selected] = null;
+  }
+  useBtn.addEventListener('touchstart', e => { e.preventDefault(); triggerUseItem(); });
+  useBtn.addEventListener('mousedown', e => { e.preventDefault(); triggerUseItem(); });
+
+  // Touch on canvas — simulate click for UI elements and prevent scroll
   canvas.addEventListener('touchstart', e => {
     e.preventDefault();
+    // Fire a synthetic click so menu buttons and in-game UI work
+    let touch = e.changedTouches[0];
+    canvas.dispatchEvent(new MouseEvent('click', {
+      clientX: touch.clientX,
+      clientY: touch.clientY,
+      bubbles: true
+    }));
   }, { passive: false });
 }
 
