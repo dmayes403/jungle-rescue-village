@@ -3,6 +3,7 @@
 <html>
 <head>
 <title>Jungle Rescue Village</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <style>
   * { margin: 0; padding: 0; }
   body { background: #000; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
@@ -63,6 +64,34 @@
   .corner.bl { border-bottom: 2.5px solid #f0e8d0; border-left: 2.5px solid #f0e8d0; }
   .corner.br { border-bottom: 2.5px solid #f0e8d0; border-right: 2.5px solid #f0e8d0; }
   .game-btn:hover .corner { border-color: #fff; }
+
+  /* Mobile layout */
+  #mobile-controls { display: none; }
+  #rotate-prompt { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 999; justify-content: center; align-items: center; flex-direction: column; color: #f0e8d0; font-family: Arial; text-align: center; }
+  #rotate-prompt .rotate-icon { font-size: 60px; margin-bottom: 20px; }
+  #rotate-prompt .rotate-text { font-size: 20px; }
+
+  @media (max-width: 1024px) and (pointer: coarse) {
+    body { background: #000; }
+    #game-container { flex-direction: row; width: 100vw; height: 100vh; }
+    canvas { border: none; }
+    #mobile-controls { display: flex; position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 20; }
+    .touch-zone { pointer-events: auto; position: absolute; top: 0; height: 100%; display: flex; justify-content: center; align-items: center; }
+    .touch-zone-left { left: 0; width: 120px; background: rgba(0,0,0,0.85); }
+    .touch-zone-right { right: 0; width: 120px; background: rgba(0,0,0,0.85); }
+    #whip-btn { width: 70px; height: 70px; border-radius: 50%; background: linear-gradient(to bottom, #6a5a3a, #3a2a14); border: 2px solid #8a7a50; color: #f0e8d0; font-family: Arial; font-weight: bold; font-size: 12px; text-transform: uppercase; cursor: pointer; display: flex; justify-content: center; align-items: center; box-shadow: inset 0 1px 0 rgba(255,255,200,0.2), 0 2px 6px rgba(0,0,0,0.5); touch-action: none; user-select: none; -webkit-user-select: none; }
+    #whip-btn:active { background: linear-gradient(to bottom, #3a2a14, #4a3a20); }
+    #joystick-area { width: 100px; height: 100px; position: relative; touch-action: none; user-select: none; -webkit-user-select: none; }
+    #joystick-base { width: 100px; height: 100px; border-radius: 50%; background: rgba(255,255,255,0.08); border: 2px solid rgba(138,122,80,0.5); position: absolute; top: 0; left: 0; }
+    #joystick-thumb { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(to bottom, #6a5a3a, #3a2a14); border: 2px solid #8a7a50; position: absolute; top: 30px; left: 30px; box-shadow: 0 2px 6px rgba(0,0,0,0.5); }
+    .game-btn { display: none !important; }
+    #fs-btn { display: none !important; }
+  }
+  @media (max-width: 1024px) and (pointer: coarse) and (orientation: portrait) {
+    #rotate-prompt { display: flex; }
+    #game-container { display: none; }
+    #mobile-controls { display: none; }
+  }
 </style>
 </head>
 <body>
@@ -73,6 +102,21 @@
 <button id="save-btn" class="game-btn" style="display:none">Save & Quit</button>
 <div id="pause-overlay"><span id="pause-text">PAUSED</span></div>
 <canvas id="game"></canvas>
+</div>
+<div id="mobile-controls">
+  <div class="touch-zone touch-zone-left">
+    <button id="whip-btn">WHIP</button>
+  </div>
+  <div class="touch-zone touch-zone-right">
+    <div id="joystick-area">
+      <div id="joystick-base"></div>
+      <div id="joystick-thumb"></div>
+    </div>
+  </div>
+</div>
+<div id="rotate-prompt">
+  <div class="rotate-icon">📱↩️</div>
+  <div class="rotate-text">Rotate your device to landscape</div>
 </div>
 
 <script>
@@ -1047,6 +1091,17 @@ function update() {
   if (keys['ArrowRight'] || keys['d'] || keys['D']) { dx = 1; player.facing = 'right'; }
   if (keys['ArrowUp'] || keys['w'] || keys['W']) { dy = -1; player.facing = 'up'; }
   if (keys['ArrowDown'] || keys['s'] || keys['S']) { dy = 1; player.facing = 'down'; }
+  // Mobile joystick input
+  if (touchJoystick.active) {
+    dx = touchJoystick.dx;
+    dy = touchJoystick.dy;
+    // Set facing based on dominant direction
+    if (Math.abs(dx) > Math.abs(dy)) {
+      player.facing = dx > 0 ? 'right' : 'left';
+    } else {
+      player.facing = dy > 0 ? 'down' : 'up';
+    }
+  }
 
   // Close quest menu on movement
   if ((dx !== 0 || dy !== 0) && questMenuOpen) {
@@ -4529,8 +4584,8 @@ function drawMainMenu() {
     ctx.restore();
   }
 
-  // Controls panel - right side
-  let cpX = canvas.width - 230, cpY = 100;
+  // Controls panel - under title
+  let cpX = 30, cpY = 90;
   let cpW = 210, controls = [
     ['WASD / Arrows', 'Move'],
     ['F', 'Whip Attack'],
@@ -4725,6 +4780,155 @@ function togglePause() {
   pauseBtn.innerHTML = paused ? '<span class="play-icon"></span>' : '<span class="pause-icon"><span></span><span></span></span>';
   pauseBtn.title = paused ? 'Resume' : 'Pause';
   pauseOverlay.classList.toggle('active', paused);
+}
+
+// --- MOBILE TOUCH CONTROLS ---
+const isMobile = ('ontouchstart' in window) && window.matchMedia('(pointer: coarse)').matches;
+let touchJoystick = { active: false, dx: 0, dy: 0 };
+
+if (isMobile) {
+  // Lock orientation if supported
+  if (screen.orientation && screen.orientation.lock) {
+    screen.orientation.lock('landscape').catch(() => {});
+  }
+
+  // Resize canvas for mobile landscape
+  function mobileResize() {
+    if (window.innerWidth > window.innerHeight) {
+      let sideBar = 120;
+      let gameW = window.innerWidth - sideBar * 2;
+      let gameH = window.innerHeight;
+      // Maintain aspect ratio
+      let ratio = 800 / 600;
+      if (gameW / gameH > ratio) {
+        canvas.height = gameH;
+        canvas.width = gameH * ratio;
+      } else {
+        canvas.width = gameW;
+        canvas.height = gameW / ratio;
+      }
+    }
+  }
+  mobileResize();
+  window.addEventListener('resize', mobileResize);
+  window.addEventListener('orientationchange', () => setTimeout(mobileResize, 100));
+
+  // Prevent default touch behaviors on game area
+  document.body.style.touchAction = 'none';
+  document.body.style.userSelect = 'none';
+  document.body.style.webkitUserSelect = 'none';
+  canvas.style.touchAction = 'none';
+
+  // Joystick controls
+  const joystickArea = document.getElementById('joystick-area');
+  const joystickThumb = document.getElementById('joystick-thumb');
+  const joystickBase = document.getElementById('joystick-base');
+  let joystickTouchId = null;
+  let joystickCenterX = 0, joystickCenterY = 0;
+
+  joystickArea.addEventListener('touchstart', e => {
+    e.preventDefault();
+    let touch = e.changedTouches[0];
+    joystickTouchId = touch.identifier;
+    let rect = joystickBase.getBoundingClientRect();
+    joystickCenterX = rect.left + rect.width / 2;
+    joystickCenterY = rect.top + rect.height / 2;
+    handleJoystickMove(touch);
+  });
+
+  window.addEventListener('touchmove', e => {
+    for (let touch of e.changedTouches) {
+      if (touch.identifier === joystickTouchId) {
+        e.preventDefault();
+        handleJoystickMove(touch);
+        break;
+      }
+    }
+  }, { passive: false });
+
+  window.addEventListener('touchend', e => {
+    for (let touch of e.changedTouches) {
+      if (touch.identifier === joystickTouchId) {
+        joystickTouchId = null;
+        touchJoystick.active = false;
+        touchJoystick.dx = 0;
+        touchJoystick.dy = 0;
+        joystickThumb.style.left = '30px';
+        joystickThumb.style.top = '30px';
+        break;
+      }
+    }
+  });
+
+  function handleJoystickMove(touch) {
+    let dx = touch.clientX - joystickCenterX;
+    let dy = touch.clientY - joystickCenterY;
+    let dist = Math.hypot(dx, dy);
+    let maxDist = 35;
+    if (dist > maxDist) {
+      dx = dx / dist * maxDist;
+      dy = dy / dist * maxDist;
+      dist = maxDist;
+    }
+    // Move thumb visual
+    joystickThumb.style.left = (30 + dx) + 'px';
+    joystickThumb.style.top = (30 + dy) + 'px';
+    // Set joystick state (normalize to -1..1)
+    let deadzone = 8;
+    if (dist > deadzone) {
+      touchJoystick.active = true;
+      touchJoystick.dx = dx / maxDist;
+      touchJoystick.dy = dy / maxDist;
+    } else {
+      touchJoystick.active = false;
+      touchJoystick.dx = 0;
+      touchJoystick.dy = 0;
+    }
+  }
+
+  // Whip button
+  const whipBtn = document.getElementById('whip-btn');
+  whipBtn.addEventListener('touchstart', e => {
+    e.preventDefault();
+    let inVillage = player.x > village.x && player.x < village.x + village.w && player.y > village.y && player.y < village.y + village.h;
+    if (!whip.active && !gameOver && !paused && !inVillage) {
+      whip.active = true;
+      whip.timer = 20;
+      let wdx = 0, wdy = 0;
+      if (player.facing === 'up') wdy = -1;
+      else if (player.facing === 'down') wdy = 1;
+      else if (player.facing === 'left') wdx = -1;
+      else if (player.facing === 'right') wdx = 1;
+      whip.x = player.x;
+      whip.y = player.y;
+      whip.endX = player.x + wdx * whip.length;
+      whip.endY = player.y + wdy * whip.length;
+      for (const wolf of wolves) {
+        let wddx = whip.endX - whip.x;
+        let wddy = whip.endY - whip.y;
+        let len2 = wddx * wddx + wddy * wddy;
+        let t = Math.max(0, Math.min(1, ((wolf.x - whip.x) * wddx + (wolf.y - whip.y) * wddy) / len2));
+        let projX = whip.x + t * wddx;
+        let projY = whip.y + t * wddy;
+        let dist = Math.hypot(wolf.x - projX, wolf.y - projY);
+        if (dist < 25) {
+          wolf.health--;
+          let kbAngle = Math.atan2(wolf.y - player.y, wolf.x - player.x);
+          wolf.x += Math.cos(kbAngle) * 40;
+          wolf.y += Math.sin(kbAngle) * 40;
+          wolf.x = Math.max(BORDER, Math.min(WORLD_W - BORDER, wolf.x));
+          wolf.y = Math.max(BORDER, Math.min(WORLD_H - BORDER, wolf.y));
+          wolf.state = 'wander';
+          wolf.angle = kbAngle;
+        }
+      }
+    }
+  });
+
+  // Touch on canvas for clicking UI elements (quest NPCs, watchtower, etc.)
+  canvas.addEventListener('touchstart', e => {
+    e.preventDefault();
+  }, { passive: false });
 }
 
 // --- GAME LOOP ---
