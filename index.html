@@ -4584,7 +4584,8 @@ function drawMainMenu() {
     ctx.restore();
   }
 
-  // Controls panel - under title
+  // Controls panel - under title (hide on mobile)
+  if (isMobile) { /* skip controls panel on mobile */ } else {
   let cpX = 30, cpY = 90;
   let cpW = 210, controls = [
     ['WASD / Arrows', 'Move'],
@@ -4642,6 +4643,7 @@ function drawMainMenu() {
     ctx.textAlign = 'right';
     ctx.fillText(controls[i][1], cpX + cpW - 12, rowY);
   }
+  } // end !isMobile controls panel
 
   // Store button bounds for click detection
   drawMainMenu._btnX = btnX;
@@ -4860,6 +4862,32 @@ if (isMobile) {
     }
   });
 
+  // Mouse support for joystick (desktop testing)
+  let joystickMouseDown = false;
+  joystickArea.addEventListener('mousedown', e => {
+    e.preventDefault();
+    joystickMouseDown = true;
+    let rect = joystickBase.getBoundingClientRect();
+    joystickCenterX = rect.left + rect.width / 2;
+    joystickCenterY = rect.top + rect.height / 2;
+    handleJoystickMove(e);
+  });
+  window.addEventListener('mousemove', e => {
+    if (joystickMouseDown) {
+      handleJoystickMove(e);
+    }
+  });
+  window.addEventListener('mouseup', e => {
+    if (joystickMouseDown) {
+      joystickMouseDown = false;
+      touchJoystick.active = false;
+      touchJoystick.dx = 0;
+      touchJoystick.dy = 0;
+      joystickThumb.style.left = '30px';
+      joystickThumb.style.top = '30px';
+    }
+  });
+
   function handleJoystickMove(touch) {
     let dx = touch.clientX - joystickCenterX;
     let dy = touch.clientY - joystickCenterY;
@@ -4888,8 +4916,7 @@ if (isMobile) {
 
   // Whip button
   const whipBtn = document.getElementById('whip-btn');
-  whipBtn.addEventListener('touchstart', e => {
-    e.preventDefault();
+  function triggerWhip() {
     let inVillage = player.x > village.x && player.x < village.x + village.w && player.y > village.y && player.y < village.y + village.h;
     if (!whip.active && !gameOver && !paused && !inVillage) {
       whip.active = true;
@@ -4923,7 +4950,9 @@ if (isMobile) {
         }
       }
     }
-  });
+  }
+  whipBtn.addEventListener('touchstart', e => { e.preventDefault(); triggerWhip(); });
+  whipBtn.addEventListener('mousedown', e => { e.preventDefault(); triggerWhip(); });
 
   // Touch on canvas for clicking UI elements (quest NPCs, watchtower, etc.)
   canvas.addEventListener('touchstart', e => {
