@@ -33,9 +33,9 @@
     box-shadow: inset 0 2px 4px rgba(0,0,0,0.5), 0 1px 2px rgba(0,0,0,0.4);
     padding: 8px 14px 6px 14px;
   }
-  #pause-btn { right: 10px; }
+  #pause-btn { right: 10px; z-index: 100; }
   #fs-btn { right: 52px; }
-  #save-btn { right: 96px; }
+  #save-btn { right: 96px; z-index: 100; }
   #pause-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 5; }
   #pause-overlay.active { display: flex; }
   #pause-text { color: #fff; font-family: Arial; font-size: 48px; text-shadow: 2px 2px 4px #000; }
@@ -76,7 +76,7 @@
     #game-container { flex-direction: row; width: 100vw; height: 100vh; }
     canvas { border: none; }
     #mobile-controls { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 20; }
-    .touch-zone { pointer-events: auto; position: absolute; top: 0; height: 100%; display: flex; justify-content: center; align-items: center; }
+    .touch-zone { pointer-events: auto; position: absolute; top: 50px; height: calc(100% - 50px); display: flex; justify-content: center; align-items: center; }
     .touch-zone-left { left: 0; width: 120px; background: rgba(0,0,0,0.85); flex-direction: column; gap: 10px; }
     .touch-zone-right { right: 0; width: 120px; background: rgba(0,0,0,0.85); }
     .mobile-action-btn { width: 70px; height: 50px; border-radius: 8px; background: linear-gradient(to bottom, #6a5a3a, #3a2a14); border: 2px solid #8a7a50; color: #f0e8d0; font-family: Arial; font-weight: bold; font-size: 11px; text-transform: uppercase; cursor: pointer; display: flex; justify-content: center; align-items: center; box-shadow: inset 0 1px 0 rgba(255,255,200,0.2), 0 2px 6px rgba(0,0,0,0.5); touch-action: none; user-select: none; -webkit-user-select: none; }
@@ -86,6 +86,8 @@
     #joystick-base { width: 100px; height: 100px; border-radius: 50%; background: rgba(255,255,255,0.08); border: 2px solid rgba(138,122,80,0.5); position: absolute; top: 0; left: 0; }
     #joystick-thumb { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(to bottom, #6a5a3a, #3a2a14); border: 2px solid #8a7a50; position: absolute; top: 30px; left: 30px; box-shadow: 0 2px 6px rgba(0,0,0,0.5); }
     #fs-btn { display: none !important; }
+    #save-btn { right: auto; left: 50%; transform: translateX(-50%); }
+    #pause-btn { right: auto; left: calc(50% + 70px); }
   }
   @media (max-width: 1024px) and (pointer: coarse) and (orientation: portrait) {
     #rotate-prompt { display: flex; }
@@ -878,6 +880,11 @@ window.addEventListener('keydown', e => { keys[e.key] = true; e.preventDefault()
 
 // Click on watchtower or menu
 canvas.addEventListener('click', e => {
+  // Click anywhere to restart on game over
+  if (gameOver) {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'R' }));
+    return;
+  }
   let rect = canvas.getBoundingClientRect();
   let scaleX = canvas.width / rect.width;
   let scaleY = canvas.height / rect.height;
@@ -3981,7 +3988,7 @@ function draw() {
     ctx.fillStyle = '#ffdd44';
     ctx.font = 'bold 11px Arial';
     ctx.textAlign = 'right';
-    ctx.fillText(visibleQuests.length + 2, qx + btnW - 8, qy + 15);
+    ctx.fillText(visibleQuests.length + 1, qx + btnW - 8, qy + 15);
 
     // Expanded quest list
     if (questTrackerOpen) {
@@ -3989,8 +3996,8 @@ function draw() {
       let panelY = qy + btnH + 3;
       let panelW = 195;
 
-      // Calculate panel height: main quest section (2 quests) + side quests section
-      let mainQuestH = 56; // header + two quest rows
+      // Calculate panel height: main quest section (1 quest) + side quests section
+      let mainQuestH = 38; // header + one quest row
       let sideQuestH = visibleQuests.length > 0 ? 18 + visibleQuests.length * 34 : 28;
       let panelH = mainQuestH + 8 + sideQuestH + 8;
 
@@ -4018,32 +4025,36 @@ function draw() {
       ctx.textAlign = 'left';
       ctx.fillText('MAIN QUEST', panelX + 6, curY + 10);
       curY += 16;
-      // Main quest: Rescue all survivors
+      // Main quest: Rescue all survivors (shown until complete)
       let rescued = village.population;
       let mainDone = rescued >= totalSurvivors && totalSurvivors > 0;
-      ctx.fillStyle = mainDone ? '#44ff44' : '#f0e8d0';
-      ctx.font = '10px Arial';
-      ctx.fillText(mainDone ? '\u2713' : '\u2022', panelX + 6, curY + 10);
-      ctx.fillText('Rescue all survivors', panelX + 18, curY + 10);
-      ctx.fillStyle = mainDone ? '#44ff44' : '#ffdd44';
-      ctx.font = 'bold 10px Arial';
-      ctx.textAlign = 'right';
-      ctx.fillText(`${rescued}/${totalSurvivors}`, panelX + panelW - 6, curY + 10);
-      curY += 18;
-      // Main quest 2: Complete 3 side quests
       let completedSideQuests = activeQuests.filter(q => q.turned_in).length;
       let sideGoal = 3;
       let sideDone = completedSideQuests >= sideGoal;
-      ctx.fillStyle = sideDone ? '#44ff44' : '#f0e8d0';
-      ctx.font = '10px Arial';
-      ctx.textAlign = 'left';
-      ctx.fillText(sideDone ? '\u2713' : '\u2022', panelX + 6, curY + 10);
-      ctx.fillText('Complete 3 side quests', panelX + 18, curY + 10);
-      ctx.fillStyle = sideDone ? '#44ff44' : '#ffdd44';
-      ctx.font = 'bold 10px Arial';
-      ctx.textAlign = 'right';
-      ctx.fillText(`${Math.min(completedSideQuests, sideGoal)}/${sideGoal}`, panelX + panelW - 6, curY + 10);
-      curY += 18;
+      if (!mainDone) {
+        // Show rescue quest while in progress
+        ctx.fillStyle = '#f0e8d0';
+        ctx.font = '10px Arial';
+        ctx.fillText('\u2022', panelX + 6, curY + 10);
+        ctx.fillText('Rescue all survivors', panelX + 18, curY + 10);
+        ctx.fillStyle = '#ffdd44';
+        ctx.font = 'bold 10px Arial';
+        ctx.textAlign = 'right';
+        ctx.fillText(`${rescued}/${totalSurvivors}`, panelX + panelW - 6, curY + 10);
+        curY += 18;
+      } else {
+        // After rescue quest done, show side quest goal
+        ctx.fillStyle = sideDone ? '#44ff44' : '#f0e8d0';
+        ctx.font = '10px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText(sideDone ? '\u2713' : '\u2022', panelX + 6, curY + 10);
+        ctx.fillText('Complete 3 side quests', panelX + 18, curY + 10);
+        ctx.fillStyle = sideDone ? '#44ff44' : '#ffdd44';
+        ctx.font = 'bold 10px Arial';
+        ctx.textAlign = 'right';
+        ctx.fillText(`${Math.min(completedSideQuests, sideGoal)}/${sideGoal}`, panelX + panelW - 6, curY + 10);
+        curY += 18;
+      }
 
       // Divider
       ctx.strokeStyle = 'rgba(138,122,80,0.3)';
@@ -4098,17 +4109,16 @@ function draw() {
     ctx.fillText(`Following: ${followers.length} survivor${followers.length > 1 ? 's' : ''} → Village`, 18, canvas.height - 22);
   }
 
-  // Win check
-  if (village.population === totalSurvivors && totalSurvivors > 0) {
+  // Win check - requires BOTH main quests complete
+  let _rescuedAll = village.population >= totalSurvivors && totalSurvivors > 0;
+  let _sideQuestsDone = activeQuests.filter(q => q.turned_in).length >= 3;
+  if (_rescuedAll && _sideQuestsDone) {
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(canvas.width/2 - 180, canvas.height/2 - 40, 360, 80);
+    ctx.fillRect(canvas.width/2 - 200, canvas.height/2 - 30, 400, 60);
     ctx.fillStyle = '#ffdd00';
     ctx.font = 'bold 28px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('ALL SURVIVORS RESCUED!', canvas.width/2, canvas.height/2);
-    ctx.fillStyle = '#fff';
-    ctx.font = '16px Arial';
-    ctx.fillText(`Village Population: ${village.population}`, canvas.width/2, canvas.height/2 + 25);
+    ctx.fillText('VILLAGE SAVED!', canvas.width/2, canvas.height/2 + 8);
   }
 
   // Draw arrows
@@ -4311,6 +4321,11 @@ function draw() {
 
   // Game Over screen
   if (gameOver) {
+    // Hide mobile controls so player can tap anywhere to restart
+    if (isMobile) {
+      let mc = document.getElementById('mobile-controls');
+      if (mc.style.display !== 'none') mc.style.display = 'none';
+    }
     ctx.fillStyle = 'rgba(0,0,0,0.7)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -4338,7 +4353,8 @@ function draw() {
     ctx.fillStyle = '#ffcc44';
     ctx.font = 'bold 20px Arial';
     let blink = Math.sin(Date.now() / 400) > 0;
-    if (blink) ctx.fillText('Press R to Restart', canvas.width/2, canvas.height/2 + 80);
+    let _onMobile = isMobile || window.matchMedia('(max-width: 1024px) and (pointer: coarse)').matches || ('ontouchstart' in window);
+    if (blink) ctx.fillText(_onMobile ? 'Press Anywhere to Restart' : 'Press R to Restart', canvas.width/2, canvas.height/2 + 80);
   }
 }
 
@@ -4838,8 +4854,9 @@ canvas.addEventListener('click', function mainMenuClick(e) {
   let btnH = drawMainMenu._btnH;
   if (!btnX) return;
 
-  // Start button
+  // Start button - begin a fresh new game
   if (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH) {
+    resetNewGame();
     inMainMenu = false;
     document.getElementById('pause-btn').style.display = '';
     document.getElementById('fs-btn').style.display = '';
@@ -4907,49 +4924,53 @@ window.addEventListener('keydown', e => {
     }
   }
   if ((e.key === 'r' || e.key === 'R') && gameOver) {
-    // Restart
-    player.health = player.maxHealth;
-    player.x = WORLD_W / 2;
-    player.y = WORLD_H / 2;
-    player.hurtTimer = 0;
-    player.invincible = 60;
-    gameOver = false;
-    // Reset crash sites
-    for (const site of crashSites) { site.rescued = false; }
-    followers.length = 0;
-    player.carrying = 0;
-    villagePeople.length = 0;
-    village.population = 0;
-    village.buildings.length = 0;
-    document.getElementById('rescued').textContent = 0;
-    document.getElementById('village').textContent = 0;
-    // Reset quests
-    activeQuests.length = 0;
-    questIdCounter = 0;
-    wolfKillCount = 0;
-    questMenuOpen = false;
-    questMenuTarget = -1;
-    // Reset inventory
-    inventory.slots = [null, null, null, null, null];
-    inventory.selected = 0;
-    speedBoostTimer = 0;
-    shieldActive = false;
-    for (const item of worldItems) item.collected = false;
-    // Scatter wolves away from player and restore health
-    for (const wolf of wolves) {
-      wolf.x = BORDER + 50 + Math.random() * (WORLD_W - BORDER * 2 - 100);
-      wolf.y = BORDER + 50 + Math.random() * (WORLD_H - BORDER * 2 - 100);
-      wolf.state = 'wander';
-      wolf.health = wolf.maxHealth;
-    }
-    // Respawn dead wolves (re-add if pack wolves were killed)
-    while (wolves.length < 10) {
-      let wx = BORDER + 50 + Math.random() * (WORLD_W - BORDER * 2 - 100);
-      let wy = BORDER + 50 + Math.random() * (WORLD_H - BORDER * 2 - 100);
-      wolves.push({ x: wx, y: wy, angle: Math.random() * Math.PI * 2, speed: 1.2, state: 'wander', attackTimer: 0, facing: 'right', health: 3, maxHealth: 3, pack: -1 });
-    }
+    resetNewGame();
   }
 });
+
+function resetNewGame() {
+  if (isMobile) document.getElementById('mobile-controls').style.display = 'flex';
+  player.health = player.maxHealth;
+  player.x = WORLD_W / 2;
+  player.y = WORLD_H / 2;
+  player.hurtTimer = 0;
+  player.invincible = 60;
+  gameOver = false;
+  // Reset crash sites
+  for (const site of crashSites) { site.rescued = false; }
+  followers.length = 0;
+  player.carrying = 0;
+  villagePeople.length = 0;
+  village.population = 0;
+  village.buildings.length = 0;
+  document.getElementById('rescued').textContent = 0;
+  document.getElementById('village').textContent = 0;
+  // Reset quests
+  activeQuests.length = 0;
+  questIdCounter = 0;
+  wolfKillCount = 0;
+  questMenuOpen = false;
+  questMenuTarget = -1;
+  // Reset inventory
+  inventory.slots = [null, null, null, null, null];
+  inventory.selected = 0;
+  speedBoostTimer = 0;
+  shieldActive = false;
+  for (const item of worldItems) item.collected = false;
+  // Scatter wolves away from player and restore health
+  for (const wolf of wolves) {
+    wolf.x = BORDER + 50 + Math.random() * (WORLD_W - BORDER * 2 - 100);
+    wolf.y = BORDER + 50 + Math.random() * (WORLD_H - BORDER * 2 - 100);
+    wolf.state = 'wander';
+    wolf.health = wolf.maxHealth;
+  }
+  // Respawn dead wolves (re-add if pack wolves were killed)
+  while (wolves.length < 10) {
+    let wx = BORDER + 50 + Math.random() * (WORLD_W - BORDER * 2 - 100);
+    let wy = BORDER + 50 + Math.random() * (WORLD_H - BORDER * 2 - 100);
+    wolves.push({ x: wx, y: wy, angle: Math.random() * Math.PI * 2, speed: 1.2, state: 'wander', attackTimer: 0, facing: 'right', health: 3, maxHealth: 3, pack: -1 });
+  }
+}
 
 function togglePause() {
   paused = !paused;
@@ -5196,6 +5217,9 @@ if (isMobile) {
 // --- GAME LOOP ---
 function gameLoop() {
   if (inMainMenu) {
+    // Make sure mobile touch zones don't block main menu buttons
+    let mc = document.getElementById('mobile-controls');
+    if (mc.style.display !== 'none') mc.style.display = 'none';
     drawMainMenu();
   } else {
     if (!paused && !gameOver) {
