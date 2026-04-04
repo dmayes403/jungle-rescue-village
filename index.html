@@ -85,7 +85,6 @@
     #joystick-area { width: 100px; height: 100px; position: relative; touch-action: none; user-select: none; -webkit-user-select: none; }
     #joystick-base { width: 100px; height: 100px; border-radius: 50%; background: rgba(255,255,255,0.08); border: 2px solid rgba(138,122,80,0.5); position: absolute; top: 0; left: 0; }
     #joystick-thumb { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(to bottom, #6a5a3a, #3a2a14); border: 2px solid #8a7a50; position: absolute; top: 30px; left: 30px; box-shadow: 0 2px 6px rgba(0,0,0,0.5); }
-    .game-btn { display: none !important; }
     #fs-btn { display: none !important; }
   }
   @media (max-width: 1024px) and (pointer: coarse) and (orientation: portrait) {
@@ -3894,10 +3893,6 @@ function draw() {
     ctx.fillStyle = '#fff';
     ctx.font = '11px Arial';
     ctx.fillText(`${it.name} - ${it.desc} [E to use]`, canvas.width / 2, hbStartY + hbSlotH + 14);
-  } else {
-    ctx.fillStyle = '#777';
-    ctx.font = '11px Arial';
-    ctx.fillText('Empty slot [1-5 to select]', canvas.width / 2, hbStartY + hbSlotH + 14);
   }
 
   // Shield indicator
@@ -4589,9 +4584,17 @@ function drawMainMenu() {
   }
 
   // Controls panel - under title (hide on mobile)
-  if (isMobile) { /* skip controls panel on mobile */ } else {
-  let cpX = 30, cpY = 90;
-  let cpW = 210, controls = [
+  {
+  let cpW_temp = 210;
+  let cpH_est = 32 + (isMobile ? 5 : 7) * 24;
+  let cpX = btnX + btnW / 2 - cpW_temp / 2, cpY = btnY - cpH_est - 15;
+  let cpW = 210, controls = isMobile ? [
+    ['Joystick', 'Move'],
+    ['WHIP', 'Whip Attack'],
+    ['ITEM', 'Cycle Items'],
+    ['USE', 'Use Item'],
+    ['Tap', 'Interact'],
+  ] : [
     ['WASD / Arrows', 'Move'],
     ['F', 'Whip Attack'],
     ['E', 'Use Item'],
@@ -4647,7 +4650,7 @@ function drawMainMenu() {
     ctx.textAlign = 'right';
     ctx.fillText(controls[i][1], cpX + cpW - 12, rowY);
   }
-  } // end !isMobile controls panel
+  } // end controls panel
 
   // Store button bounds for click detection
   drawMainMenu._btnX = btnX;
