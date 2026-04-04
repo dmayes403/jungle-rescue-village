@@ -1,0 +1,4746 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+<title>Jungle Rescue Village</title>
+<style>
+  * { margin: 0; padding: 0; }
+  body { background: #000; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+  #game-container { position: relative; display: flex; justify-content: center; align-items: center; }
+  canvas { border: 2px solid #2d5a1e; display: block; }
+  #ui { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); color: #fff; font-family: Arial; font-size: 18px; text-shadow: 1px 1px 2px #000; pointer-events: none; white-space: nowrap; }
+  #instructions { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); color: #fff; font-family: Arial; font-size: 14px; text-shadow: 1px 1px 2px #000; pointer-events: none; white-space: nowrap; }
+  .game-btn {
+    position: absolute; top: 10px; z-index: 10; cursor: pointer;
+    font-family: 'Arial', sans-serif; font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;
+    color: #f0e8d0; text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+    padding: 7px 14px;
+    background: linear-gradient(to bottom, #6a5a3a 0%, #4a3a20 50%, #3a2a14 51%, #4a3a20 100%);
+    border: 2px solid #8a7a50;
+    border-radius: 3px;
+    box-shadow: inset 0 1px 0 rgba(255,255,200,0.2), inset 0 -1px 0 rgba(0,0,0,0.3), 0 2px 4px rgba(0,0,0,0.5), 0 0 8px rgba(0,0,0,0.3);
+  }
+  .game-btn:hover {
+    background: linear-gradient(to bottom, #7a6a4a 0%, #5a4a30 50%, #4a3a24 51%, #5a4a30 100%);
+    border-color: #aa9a60;
+    color: #fff;
+    box-shadow: inset 0 1px 0 rgba(255,255,200,0.3), inset 0 -1px 0 rgba(0,0,0,0.3), 0 2px 6px rgba(0,0,0,0.6), 0 0 12px rgba(140,120,60,0.2);
+  }
+  .game-btn:active {
+    background: linear-gradient(to bottom, #3a2a14 0%, #4a3a20 50%, #5a4a30 51%, #4a3a20 100%);
+    border-color: #6a5a3a;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.5), 0 1px 2px rgba(0,0,0,0.4);
+    padding: 8px 14px 6px 14px;
+  }
+  #pause-btn { right: 10px; }
+  #fs-btn { right: 52px; }
+  #save-btn { right: 96px; }
+  #pause-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 5; }
+  #pause-overlay.active { display: flex; }
+  #pause-text { color: #fff; font-family: Arial; font-size: 48px; text-shadow: 2px 2px 4px #000; }
+  :fullscreen { background: #000; }
+  :fullscreen #game-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; background: #000; margin: 0; padding: 0; }
+  :fullscreen canvas { margin: 0; }
+
+  /* Icon buttons */
+  .icon-btn { padding: 8px 10px; line-height: 0; }
+  .icon-btn:active { padding: 9px 10px 7px 10px; }
+
+  /* Pause icon - two vertical bars */
+  .pause-icon { display: inline-flex; gap: 3px; align-items: center; height: 14px; }
+  .pause-icon span { display: block; width: 4px; height: 14px; background: #f0e8d0; border-radius: 1px; }
+  .game-btn:hover .pause-icon span { background: #fff; }
+
+  /* Play icon (for resume state) */
+  .play-icon { display: inline-block; width: 0; height: 0; border-style: solid; border-width: 7px 0 7px 11px; border-color: transparent transparent transparent #f0e8d0; }
+  .game-btn:hover .play-icon { border-left-color: #fff; }
+
+  /* Fullscreen icon - four disconnected corners */
+  .fs-icon { display: inline-grid; grid-template-columns: 1fr 1fr; gap: 4px; width: 16px; height: 14px; }
+  .corner { display: block; width: 6px; height: 5px; }
+  .corner.tl { border-top: 2.5px solid #f0e8d0; border-left: 2.5px solid #f0e8d0; }
+  .corner.tr { border-top: 2.5px solid #f0e8d0; border-right: 2.5px solid #f0e8d0; }
+  .corner.bl { border-bottom: 2.5px solid #f0e8d0; border-left: 2.5px solid #f0e8d0; }
+  .corner.br { border-bottom: 2.5px solid #f0e8d0; border-right: 2.5px solid #f0e8d0; }
+  .game-btn:hover .corner { border-color: #fff; }
+</style>
+</head>
+<body>
+<div id="game-container">
+<div id="ui" style="display:none"><span id="rescued">0</span><span id="total">0</span><span id="village">0</span></div>
+<button id="pause-btn" class="game-btn icon-btn" title="Pause" style="display:none"><span class="pause-icon"><span></span><span></span></span></button>
+<button id="fs-btn" class="game-btn icon-btn" title="Fullscreen" style="display:none"><span class="fs-icon"><span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span></span></button>
+<button id="save-btn" class="game-btn" style="display:none">Save & Quit</button>
+<div id="pause-overlay"><span id="pause-text">PAUSED</span></div>
+<canvas id="game"></canvas>
+</div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+// Make canvas fill the screen
+canvas.width = 800;
+canvas.height = 600;
+
+// Fullscreen
+const fsBtn = document.getElementById('fs-btn');
+const gameContainer = document.getElementById('game-container');
+fsBtn.addEventListener('click', () => {
+  if (!document.fullscreenElement) {
+    gameContainer.requestFullscreen();
+  } else {
+    document.exitFullscreen();
+  }
+});
+function resizeCanvas() {
+  if (document.fullscreenElement) {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    fsBtn.innerHTML = '<span class="fs-icon"><span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span></span>';
+    fsBtn.title = 'Exit Fullscreen';
+  } else {
+    canvas.width = 800;
+    canvas.height = 600;
+    fsBtn.innerHTML = '<span class="fs-icon"><span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span></span>';
+    fsBtn.title = 'Fullscreen';
+  }
+}
+document.addEventListener('fullscreenchange', resizeCanvas);
+window.addEventListener('resize', () => { if (document.fullscreenElement) resizeCanvas(); });
+
+// Fullscreen button
+
+// --- GAME WORLD ---
+const WORLD_W = 2400;
+const WORLD_H = 2400;
+
+// Camera
+let camX = 0;
+let camY = 0;
+
+// Player
+const player = {
+  x: WORLD_W / 2,
+  y: WORLD_H / 2,
+  w: 28,
+  h: 36,
+  speed: 3,
+  color: '#6b3a1a',
+  carrying: 0, // how many survivors following
+  facing: 'down'
+};
+
+// Village area (center of map)
+const village = {
+  x: WORLD_W / 2 - 120,
+  y: WORLD_H / 2 - 120,
+  w: 240,
+  h: 240,
+  population: 0,
+  buildings: []
+};
+
+// Generate jungle trees
+const trees = [];
+for (let i = 0; i < 600; i++) {
+  let tx = Math.random() * WORLD_W;
+  let ty = Math.random() * WORLD_H;
+  // Don't place trees in the village
+  if (tx > village.x - 20 && tx < village.x + village.w + 20 &&
+      ty > village.y - 20 && ty < village.y + village.h + 20) continue;
+  trees.push({
+    x: tx, y: ty,
+    size: 15 + Math.random() * 25,
+    shade: `rgb(${20 + Math.random()*40}, ${80 + Math.random()*60}, ${15 + Math.random()*30})`,
+    type: Math.floor(Math.random() * 2), // 0=palm, 1=big leafy
+    sway: Math.random() * 100 // offset for wind animation
+  });
+}
+
+// Dense border forest trees (extends beyond map edges)
+const BORDER = 150;
+const borderTrees = [];
+const borderExt = 500; // how far beyond map edges to place trees
+for (let i = 0; i < 3000; i++) {
+  let bx, by;
+  let side = Math.floor(Math.random() * 4);
+  if (side === 0) { bx = -borderExt + Math.random() * (WORLD_W + borderExt * 2); by = -borderExt + Math.random() * (BORDER + borderExt); }
+  else if (side === 1) { bx = -borderExt + Math.random() * (WORLD_W + borderExt * 2); by = WORLD_H - BORDER + Math.random() * (BORDER + borderExt); }
+  else if (side === 2) { bx = -borderExt + Math.random() * (BORDER + borderExt); by = -borderExt + Math.random() * (WORLD_H + borderExt * 2); }
+  else { bx = WORLD_W - BORDER + Math.random() * (BORDER + borderExt); by = -borderExt + Math.random() * (WORLD_H + borderExt * 2); }
+  borderTrees.push({
+    x: bx, y: by,
+    size: 20 + Math.random() * 20,
+    shade: `rgb(${10 + Math.random()*25}, ${50 + Math.random()*40}, ${10 + Math.random()*20})`
+  });
+}
+
+// Ground clutter - fallen logs and bushes
+const clutter = [];
+for (let i = 0; i < 200; i++) {
+  let cx = Math.random() * WORLD_W;
+  let cy = Math.random() * WORLD_H;
+  // Don't place in village
+  if (cx > village.x - 20 && cx < village.x + village.w + 20 &&
+      cy > village.y - 20 && cy < village.y + village.h + 20) continue;
+  clutter.push({
+    x: cx, y: cy,
+    type: 'log',
+    angle: Math.random() * Math.PI,
+    size: 8 + Math.random() * 12,
+    shade: `rgb(${30 + Math.random()*30}, ${90 + Math.random()*50}, ${20 + Math.random()*25})`
+  });
+}
+
+// Rivers - generate winding paths that start from random edges and split
+const rivers = [];
+const RIVER_WIDTH = 28;
+
+// Village zone to avoid (with generous padding)
+const villagePad = 60;
+const vzLeft = village.x - villagePad;
+const vzRight = village.x + village.w + villagePad;
+const vzTop = village.y - villagePad;
+const vzBot = village.y + village.h + villagePad;
+
+function inVillageZone(px, py) {
+  return px > vzLeft && px < vzRight && py > vzTop && py < vzBot;
+}
+
+// Check if point is near any already-placed river
+function nearExistingRiver(px, py, dist) {
+  for (const river of rivers) {
+    for (let i = 0; i < river.length - 1; i++) {
+      let ax = river[i].x, ay = river[i].y;
+      let bx = river[i+1].x, by = river[i+1].y;
+      let dx2 = bx - ax, dy2 = by - ay;
+      let len2 = dx2 * dx2 + dy2 * dy2;
+      if (len2 === 0) continue;
+      let t = Math.max(0, Math.min(1, ((px - ax) * dx2 + (py - ay) * dy2) / len2));
+      let projX = ax + t * dx2, projY = ay + t * dy2;
+      if (Math.hypot(px - projX, py - projY) < dist) return true;
+    }
+  }
+  return false;
+}
+
+function generateRiver(startX, startY, dirX, dirY, length) {
+  let river = [];
+  let rx = startX, ry = startY;
+  let dx = dirX, dy = dirY;
+  for (let step = 0; step < length; step++) {
+    // Skip village zone — steer around it
+    if (inVillageZone(rx, ry)) {
+      // Push away from village center
+      let vcx = village.x + village.w / 2;
+      let vcy = village.y + village.h / 2;
+      let awayX = rx - vcx;
+      let awayY = ry - vcy;
+      let awayMag = Math.hypot(awayX, awayY) || 1;
+      dx = awayX / awayMag;
+      dy = awayY / awayMag;
+      rx += dx * 50;
+      ry += dy * 50;
+      continue;
+    }
+
+    // Stop if overlapping another river
+    if (nearExistingRiver(rx, ry, RIVER_WIDTH * 2.5)) break;
+
+    river.push({ x: rx, y: ry });
+
+    // Wander the direction slightly
+    dx += (Math.random() - 0.5) * 0.4;
+    dy += (Math.random() - 0.5) * 0.4;
+    let mag = Math.hypot(dx, dy);
+    dx = (dx / mag);
+    dy = (dy / mag);
+    rx += dx * (35 + Math.random() * 15);
+    ry += dy * (35 + Math.random() * 15);
+
+    // Stop if off the map
+    if (rx < -50 || rx > WORLD_W + 50 || ry < -50 || ry > WORLD_H + 50) break;
+  }
+  return river;
+}
+
+// Pick random start edges and directions
+for (let r = 0; r < 3; r++) {
+  let startX, startY, dirX, dirY;
+  let edge = Math.floor(Math.random() * 4);
+  if (edge === 0) { // top
+    startX = 200 + Math.random() * (WORLD_W - 400);
+    startY = 0;
+    dirX = (Math.random() - 0.5) * 0.6;
+    dirY = 1;
+  } else if (edge === 1) { // bottom
+    startX = 200 + Math.random() * (WORLD_W - 400);
+    startY = WORLD_H;
+    dirX = (Math.random() - 0.5) * 0.6;
+    dirY = -1;
+  } else if (edge === 2) { // left
+    startX = 0;
+    startY = 200 + Math.random() * (WORLD_H - 400);
+    dirX = 1;
+    dirY = (Math.random() - 0.5) * 0.6;
+  } else { // right
+    startX = WORLD_W;
+    startY = 200 + Math.random() * (WORLD_H - 400);
+    dirX = -1;
+    dirY = (Math.random() - 0.5) * 0.6;
+  }
+
+  // Don't start near the village
+  if (inVillageZone(startX, startY)) continue;
+
+  let main = generateRiver(startX, startY, dirX, dirY, 80);
+  if (main.length < 5) continue; // too short, skip
+  rivers.push(main);
+}
+
+// Remove rivers that don't reach from one edge of the map to another
+const edgeMargin = 80;
+function atEdge(p) {
+  return p.x <= edgeMargin || p.x >= WORLD_W - edgeMargin ||
+         p.y <= edgeMargin || p.y >= WORLD_H - edgeMargin;
+}
+for (let i = rivers.length - 1; i >= 0; i--) {
+  let r = rivers[i];
+  if (r.length < 3 || !atEdge(r[0]) || !atEdge(r[r.length - 1])) {
+    rivers.splice(i, 1);
+  }
+}
+
+// Helper: check if a point is near any river
+function nearRiver(px, py, dist) {
+  for (const river of rivers) {
+    for (let i = 0; i < river.length - 1; i++) {
+      let ax = river[i].x, ay = river[i].y;
+      let bx = river[i+1].x, by = river[i+1].y;
+      let dx2 = bx - ax, dy2 = by - ay;
+      let len2 = dx2 * dx2 + dy2 * dy2;
+      let t = Math.max(0, Math.min(1, ((px - ax) * dx2 + (py - ay) * dy2) / len2));
+      let projX = ax + t * dx2, projY = ay + t * dy2;
+      if (Math.hypot(px - projX, py - projY) < dist) return true;
+    }
+  }
+  return false;
+}
+
+// Bridges - place 2-3 per river, only at straight sections
+const bridges = [];
+for (const river of rivers) {
+  if (river.length < 6) continue;
+  let spacing = Math.floor(river.length / 4);
+  for (let b = 1; b <= 3; b++) {
+    let target = Math.min(b * spacing, river.length - 3);
+    // Search nearby for a straight section
+    let bestIdx = -1;
+    let bestAngleDiff = Infinity;
+    let searchRange = Math.min(6, Math.floor(spacing / 2));
+    for (let s = -searchRange; s <= searchRange; s++) {
+      let idx = target + s;
+      if (idx < 1 || idx >= river.length - 2) continue;
+      // Angle between previous segment and next segment
+      let a1 = Math.atan2(river[idx].y - river[idx-1].y, river[idx].x - river[idx-1].x);
+      let a2 = Math.atan2(river[idx+1].y - river[idx].y, river[idx+1].x - river[idx].x);
+      let diff = Math.abs(a2 - a1);
+      if (diff > Math.PI) diff = Math.PI * 2 - diff;
+      if (diff < bestAngleDiff) {
+        bestAngleDiff = diff;
+        bestIdx = idx;
+      }
+    }
+    // Only place bridge if the turn is gentle enough (less than ~30 degrees)
+    if (bestIdx >= 0 && bestAngleDiff < 0.5) {
+      let p = river[bestIdx];
+      let pNext = river[bestIdx + 1];
+      let angle = Math.atan2(pNext.y - p.y, pNext.x - p.x);
+      bridges.push({
+        x: p.x,
+        y: p.y,
+        angle: angle,
+        w: RIVER_WIDTH + 16,
+        h: 20
+      });
+    }
+  }
+}
+
+// Helper: check if a point is on a bridge
+function onBridge(px, py) {
+  for (const br of bridges) {
+    // Rotate point into bridge's local space
+    let cos = Math.cos(-br.angle + Math.PI / 2);
+    let sin = Math.sin(-br.angle + Math.PI / 2);
+    let lx = (px - br.x) * cos - (py - br.y) * sin;
+    let ly = (px - br.x) * sin + (py - br.y) * cos;
+    if (Math.abs(lx) < br.h / 2 + 4 && Math.abs(ly) < br.w / 2 + 4) return true;
+  }
+  return false;
+}
+
+// Remove trees that overlap rivers or bridges
+for (let i = trees.length - 1; i >= 0; i--) {
+  if (nearRiver(trees[i].x, trees[i].y, RIVER_WIDTH + 10)) trees.splice(i, 1);
+  else {
+    for (const br of bridges) {
+      if (Math.hypot(trees[i].x - br.x, trees[i].y - br.y) < 30) {
+        trees.splice(i, 1);
+        break;
+      }
+    }
+  }
+}
+
+// Remove clutter that overlaps rivers or border
+for (let i = clutter.length - 1; i >= 0; i--) {
+  let c = clutter[i];
+  if (nearRiver(c.x, c.y, RIVER_WIDTH + 5) ||
+      c.x < BORDER || c.x > WORLD_W - BORDER ||
+      c.y < BORDER || c.y > WORLD_H - BORDER) {
+    clutter.splice(i, 1);
+  }
+}
+
+// Remove bridges that are in the border zone
+for (let i = bridges.length - 1; i >= 0; i--) {
+  let br = bridges[i];
+  if (br.x < BORDER || br.x > WORLD_W - BORDER ||
+      br.y < BORDER || br.y > WORLD_H - BORDER) {
+    bridges.splice(i, 1);
+  }
+}
+
+// Crash sites
+const crashSites = [];
+const crashTypes = ['plane', 'helicopter'];
+for (let i = 0; i < 8; i++) {
+  let cx, cy;
+  do {
+    cx = 150 + Math.random() * (WORLD_W - 300);
+    cy = 150 + Math.random() * (WORLD_H - 300);
+  } while ((Math.abs(cx - WORLD_W/2) < 200 && Math.abs(cy - WORLD_H/2) < 200) ||
+    nearRiver(cx, cy, RIVER_WIDTH + 15));
+
+  crashSites.push({
+    x: cx, y: cy,
+    type: crashTypes[Math.floor(Math.random() * 2)],
+    survivors: 1 + Math.floor(Math.random() * 3),
+    rescued: false,
+    smoke: []
+  });
+}
+
+// Wolves - lone wolves + packs
+const wolves = [];
+// 4 lone wolves
+for (let i = 0; i < 4; i++) {
+  let wx, wy;
+  do {
+    wx = BORDER + 50 + Math.random() * (WORLD_W - BORDER * 2 - 100);
+    wy = BORDER + 50 + Math.random() * (WORLD_H - BORDER * 2 - 100);
+  } while (Math.abs(wx - WORLD_W/2) < 200 && Math.abs(wy - WORLD_H/2) < 200);
+  wolves.push({
+    x: wx, y: wy,
+    angle: Math.random() * Math.PI * 2,
+    speed: 1.2,
+    state: 'wander',
+    attackTimer: 0,
+    facing: 'right',
+    health: 3,
+    maxHealth: 3,
+    pack: -1 // lone wolf
+  });
+}
+// 2 wolf packs of 3-4 wolves each, spread far apart
+const packPositions = [];
+for (let p = 0; p < 2; p++) {
+  let packX, packY, tooClose;
+  do {
+    packX = BORDER + 200 + Math.random() * (WORLD_W - BORDER * 2 - 400);
+    packY = BORDER + 200 + Math.random() * (WORLD_H - BORDER * 2 - 400);
+    tooClose = Math.abs(packX - WORLD_W/2) < 300 && Math.abs(packY - WORLD_H/2) < 300;
+    // Check distance from other packs and lone wolves
+    for (const pp of packPositions) {
+      if (Math.hypot(packX - pp.x, packY - pp.y) < 500) tooClose = true;
+    }
+    for (const w of wolves) {
+      if (Math.hypot(packX - w.x, packY - w.y) < 400) tooClose = true;
+    }
+  } while (tooClose);
+  packPositions.push({ x: packX, y: packY });
+  let packSize = 3 + Math.floor(Math.random() * 2); // 3 or 4
+  for (let i = 0; i < packSize; i++) {
+    let isAlpha = i === 0;
+    wolves.push({
+      x: packX + (Math.random() - 0.5) * 60,
+      y: packY + (Math.random() - 0.5) * 60,
+      angle: Math.random() * Math.PI * 2,
+      speed: isAlpha ? 1.4 : 1.2,
+      state: 'wander',
+      attackTimer: 0,
+      facing: 'right',
+      health: isAlpha ? 5 : 3,
+      maxHealth: isAlpha ? 5 : 3,
+      pack: p,
+      isAlpha: isAlpha,
+      packX: packX,
+      packY: packY
+    });
+  }
+}
+
+// Player health
+player.health = 10;
+player.maxHealth = 10;
+player.hurtTimer = 0;
+player.invincible = 0;
+const WOLF_DETECT = 180;
+
+// Inventory system
+const ITEM_TYPES = {
+  medkit:   { name: 'Medkit',   color: '#ff4444', icon: '+', desc: 'Heals 3 HP' },
+  food:     { name: 'Food',     color: '#dd8833', icon: 'F', desc: 'Heals 1 HP' },
+  shield:   { name: 'Shield',   color: '#4488cc', icon: 'O', desc: 'Blocks 1 hit' },
+  speed:    { name: 'Boots',    color: '#44cc44', icon: 'B', desc: 'Speed boost 10s' },
+};
+
+const inventory = { slots: [null, null, null, null, null], selected: 0 };
+
+// Scatter items on the map
+const worldItems = [];
+// Items near crash sites
+for (const site of crashSites) {
+  let itemTypes = Object.keys(ITEM_TYPES);
+  let type = itemTypes[Math.floor(Math.random() * itemTypes.length)];
+  worldItems.push({
+    x: site.x + 30 + Math.random() * 40 - 20,
+    y: site.y + 30 + Math.random() * 40 - 20,
+    type: type,
+    collected: false
+  });
+}
+// Random items scattered around the map
+for (let i = 0; i < 15; i++) {
+  let ix, iy;
+  do {
+    ix = BORDER + 50 + Math.random() * (WORLD_W - BORDER * 2 - 100);
+    iy = BORDER + 50 + Math.random() * (WORLD_H - BORDER * 2 - 100);
+  } while (inVillageZone(ix, iy) || nearRiver(ix, iy, RIVER_WIDTH));
+  let itemTypes = Object.keys(ITEM_TYPES);
+  worldItems.push({
+    x: ix, y: iy,
+    type: itemTypes[Math.floor(Math.random() * itemTypes.length)],
+    collected: false
+  });
+}
+
+// Active effects
+let speedBoostTimer = 0;
+let shieldActive = false;
+
+// --- QUEST SYSTEM ---
+const QUEST_TEMPLATES = [
+  { type: 'kill_wolves', desc: 'Defeat {n} wolves', min: 2, max: 4, reward: 'medkit' },
+  { type: 'kill_wolves', desc: 'Defeat {n} wolves', min: 3, max: 5, reward: 'shield' },
+  { type: 'gather_food', desc: 'Bring me {n} Food', min: 1, max: 2, reward: 'speed' },
+  { type: 'gather_medkit', desc: 'Bring me {n} Medkit(s)', min: 1, max: 2, reward: 'food' },
+  { type: 'rescue_survivors', desc: 'Rescue {n} more survivors', min: 2, max: 4, reward: 'medkit' },
+  { type: 'gather_food', desc: 'Bring me {n} Food', min: 2, max: 3, reward: 'shield' },
+];
+const activeQuests = []; // { id, giver (villagePerson index), desc, type, need, progress, reward, done }
+let questMenuOpen = false;
+let questTrackerOpen = false;
+let questMenuTarget = -1; // index into villagePeople
+let questIdCounter = 0;
+let wolfKillCount = 0; // track total wolf kills for quest progress
+
+// Count total survivors
+let totalSurvivors = crashSites.reduce((sum, s) => sum + s.survivors, 0);
+document.getElementById('total').textContent = totalSurvivors;
+
+// Followers (rescued people following the player)
+const followers = [];
+
+// Village people (already delivered)
+const villagePeople = [];
+
+// Buildings that get auto-built
+const buildingTypes = [
+  { name: 'Hut', color: '#8B6914', w: 40, h: 40, roofColor: '#5a3a0a', need: 2 },
+  { name: 'Campfire', color: '#8B0000', w: 20, h: 20, roofColor: '#ff4500', need: 3 },
+  { name: 'Watchtower', color: '#6B4226', w: 30, h: 50, roofColor: '#4a2a10', need: 5 },
+  { name: 'Medical Tent', color: '#fff', w: 50, h: 35, roofColor: '#ff0000', need: 7 },
+];
+
+// Global walk timer for animation
+let walkTimer = 0;
+
+// Draw a person with head, torso, arms, legs that animate
+function drawBean(x, y, size, bodyColor, facingDir, isPlayer, isMoving) {
+  const s = size;
+  ctx.save();
+  ctx.translate(x, y);
+
+  // Walk animation - swing arms and legs
+  let swing = isMoving ? Math.sin(walkTimer * 0.15) * 0.6 : 0;
+  let armSwing = isMoving ? Math.sin(walkTimer * 0.15) * 0.5 : 0;
+
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.beginPath();
+  ctx.ellipse(0, s * 0.7, s * 0.3, s * 0.08, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  const skinColor = '#f5c28a';
+  const shoeColor = '#333';
+  const pantsColor = isPlayer ? '#8a7a55' : '#3355aa';
+  const limbWidth = s * 0.1;
+
+  // --- LEGS ---
+  ctx.lineCap = 'round';
+  ctx.lineWidth = limbWidth;
+
+  // Left leg
+  ctx.strokeStyle = pantsColor;
+  let lLegAngle = swing;
+  let lFootX = Math.sin(lLegAngle) * s * 0.2;
+  let lFootY = s * 0.65;
+  ctx.beginPath();
+  ctx.moveTo(-s * 0.1, s * 0.2);
+  ctx.lineTo(-s * 0.1 + lFootX, lFootY);
+  ctx.stroke();
+  // Shoe
+  ctx.fillStyle = shoeColor;
+  ctx.beginPath();
+  ctx.arc(-s * 0.1 + lFootX, lFootY, s * 0.06, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Right leg
+  let rLegAngle = -swing;
+  let rFootX = Math.sin(rLegAngle) * s * 0.2;
+  let rFootY = s * 0.65;
+  ctx.strokeStyle = pantsColor;
+  ctx.beginPath();
+  ctx.moveTo(s * 0.1, s * 0.2);
+  ctx.lineTo(s * 0.1 + rFootX, rFootY);
+  ctx.stroke();
+  // Shoe
+  ctx.fillStyle = shoeColor;
+  ctx.beginPath();
+  ctx.arc(s * 0.1 + rFootX, rFootY, s * 0.06, 0, Math.PI * 2);
+  ctx.fill();
+
+  // --- TORSO ---
+  ctx.fillStyle = bodyColor;
+  ctx.beginPath();
+  ctx.roundRect(-s * 0.2, -s * 0.15, s * 0.4, s * 0.4, s * 0.08);
+  ctx.fill();
+  ctx.strokeStyle = shadeColor(bodyColor, -30);
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(-s * 0.2, -s * 0.15, s * 0.4, s * 0.4, s * 0.08);
+  ctx.stroke();
+
+  // --- ARMS ---
+  ctx.lineWidth = limbWidth;
+  ctx.lineCap = 'round';
+
+  // Left arm
+  ctx.strokeStyle = skinColor;
+  let lArmSwing = -armSwing;
+  let lHandX = -s * 0.28 + Math.sin(lArmSwing) * s * 0.12;
+  let lHandY = s * 0.15 + Math.cos(lArmSwing) * s * 0.05;
+  ctx.beginPath();
+  ctx.moveTo(-s * 0.2, -s * 0.05);
+  ctx.lineTo(lHandX, lHandY);
+  ctx.stroke();
+  // Hand
+  ctx.fillStyle = skinColor;
+  ctx.beginPath();
+  ctx.arc(lHandX, lHandY, s * 0.05, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Right arm
+  let rArmSwing = armSwing;
+  let rHandX = s * 0.28 + Math.sin(rArmSwing) * s * 0.12;
+  let rHandY = s * 0.15 + Math.cos(rArmSwing) * s * 0.05;
+  ctx.strokeStyle = skinColor;
+  ctx.beginPath();
+  ctx.moveTo(s * 0.2, -s * 0.05);
+  ctx.lineTo(rHandX, rHandY);
+  ctx.stroke();
+  // Hand
+  ctx.fillStyle = skinColor;
+  ctx.beginPath();
+  ctx.arc(rHandX, rHandY, s * 0.05, 0, Math.PI * 2);
+  ctx.fill();
+
+  // --- HEAD ---
+  // Neck
+  ctx.fillStyle = skinColor;
+  ctx.fillRect(-s * 0.06, -s * 0.25, s * 0.12, s * 0.12);
+
+  // Head circle
+  ctx.fillStyle = skinColor;
+  ctx.beginPath();
+  ctx.arc(0, -s * 0.38, s * 0.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#d4a06a';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(0, -s * 0.38, s * 0.2, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Hair
+  ctx.fillStyle = '#5a3510';
+  ctx.beginPath();
+  ctx.arc(0, -s * 0.42, s * 0.2, Math.PI, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(0, -s * 0.52, s * 0.12, s * 0.06, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Face
+  if (facingDir !== 'up') {
+    let eyeOff = facingDir === 'left' ? -s * 0.03 : facingDir === 'right' ? s * 0.03 : 0;
+    // Eyes
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.ellipse(eyeOff - s * 0.07, -s * 0.4, s * 0.045, s * 0.05, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(eyeOff + s * 0.07, -s * 0.4, s * 0.045, s * 0.05, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Pupils
+    let pupilOff = facingDir === 'left' ? -s * 0.02 : facingDir === 'right' ? s * 0.02 : 0;
+    ctx.fillStyle = '#222';
+    ctx.beginPath();
+    ctx.arc(eyeOff - s * 0.07 + pupilOff, -s * 0.39, s * 0.025, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(eyeOff + s * 0.07 + pupilOff, -s * 0.39, s * 0.025, 0, Math.PI * 2);
+    ctx.fill();
+    // Smile - confident smirk: flat left side, curved up on the right
+    ctx.strokeStyle = '#884422';
+    ctx.lineWidth = s * 0.03;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(eyeOff + s * 0.08, -s * 0.27);
+    ctx.lineTo(eyeOff - s * 0.02, -s * 0.27);
+    ctx.quadraticCurveTo(eyeOff - s * 0.1, -s * 0.27, eyeOff - s * 0.1, -s * 0.32);
+    ctx.stroke();
+  }
+
+  // Player gets Indiana Jones style
+  if (isPlayer) {
+    // Satchel bag strap
+    ctx.strokeStyle = '#5a3010';
+    ctx.lineWidth = s * 0.04;
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.15, -s * 0.15);
+    ctx.lineTo(s * 0.15, s * 0.15);
+    ctx.stroke();
+    // Satchel bag
+    ctx.fillStyle = '#7a4a20';
+    ctx.beginPath();
+    ctx.roundRect(s * 0.1, s * 0.05, s * 0.15, s * 0.12, 2);
+    ctx.fill();
+    ctx.strokeStyle = '#5a3010';
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+    // Bag flap
+    ctx.fillStyle = '#6a3a15';
+    ctx.fillRect(s * 0.1, s * 0.05, s * 0.15, s * 0.04);
+    // Bag buckle
+    ctx.fillStyle = '#bb9944';
+    ctx.fillRect(s * 0.15, s * 0.06, s * 0.04, s * 0.03);
+
+    // Fedora hat
+    // Brim
+    ctx.fillStyle = '#5a3a18';
+    ctx.beginPath();
+    ctx.ellipse(0, -s * 0.42, s * 0.3, s * 0.06, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Crown
+    ctx.fillStyle = '#6a4420';
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.18, -s * 0.42);
+    ctx.quadraticCurveTo(-s * 0.18, -s * 0.58, -s * 0.06, -s * 0.58);
+    ctx.lineTo(s * 0.06, -s * 0.58);
+    ctx.quadraticCurveTo(s * 0.18, -s * 0.58, s * 0.18, -s * 0.42);
+    ctx.closePath();
+    ctx.fill();
+    // Crown dent
+    ctx.fillStyle = '#5a3a18';
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.08, -s * 0.58);
+    ctx.quadraticCurveTo(0, -s * 0.53, s * 0.08, -s * 0.58);
+    ctx.closePath();
+    ctx.fill();
+    // Hat band
+    ctx.fillStyle = '#3a2008';
+    ctx.fillRect(-s * 0.18, -s * 0.44, s * 0.36, s * 0.03);
+
+    // Whip (coiled at hip when still, trailing when moving)
+    ctx.strokeStyle = '#3a2008';
+    ctx.lineWidth = s * 0.03;
+    ctx.lineCap = 'round';
+    // Coiled at hip
+    ctx.beginPath();
+    ctx.arc(-s * 0.22, s * 0.12, s * 0.06, 0, Math.PI * 1.5);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(-s * 0.22, s * 0.12, s * 0.03, 0, Math.PI * 1.2);
+    ctx.stroke();
+
+    // Belt
+    ctx.fillStyle = '#3a2008';
+    ctx.fillRect(-s * 0.2, s * 0.08, s * 0.4, s * 0.03);
+    // Belt buckle
+    ctx.fillStyle = '#bb9944';
+    ctx.fillRect(-s * 0.03, s * 0.075, s * 0.06, s * 0.04);
+  }
+
+  ctx.restore();
+}
+
+// Helper to darken/lighten a hex color
+function shadeColor(color, percent) {
+  if (color.startsWith('hsl')) return color;
+  let num = parseInt(color.replace('#',''), 16);
+  let r = Math.min(255, Math.max(0, (num >> 16) + percent));
+  let g = Math.min(255, Math.max(0, ((num >> 8) & 0x00FF) + percent));
+  let b = Math.min(255, Math.max(0, (num & 0x0000FF) + percent));
+  return `rgb(${r},${g},${b})`;
+}
+
+// Watchtower jobs system
+const watchtowerJobs = {
+  lookout: { name: 'Lookout', desc: 'Shows wolves on minimap', assigned: 0, max: 1 },
+  scout: { name: 'Scout', desc: 'Reveals crash sites on minimap', assigned: 0, max: 1 },
+  archer: { name: 'Archer', desc: 'Shoots wolves near village', assigned: 0, max: 2 }
+};
+let watchtowerMenuOpen = false;
+const arrows = [];
+
+// Input
+const keys = {};
+window.addEventListener('keydown', e => { keys[e.key] = true; e.preventDefault(); });
+
+// Click on watchtower or menu
+canvas.addEventListener('click', e => {
+  let rect = canvas.getBoundingClientRect();
+  let scaleX = canvas.width / rect.width;
+  let scaleY = canvas.height / rect.height;
+  let mx = (e.clientX - rect.left) * scaleX;
+  let my = (e.clientY - rect.top) * scaleY;
+
+  // Quest tracker toggle
+  {
+    let qx = 6, qy = 34, btnW = 90, btnH = 22;
+    if (mx >= qx && mx <= qx + btnW && my >= qy && my <= qy + btnH) {
+      questTrackerOpen = !questTrackerOpen;
+      return;
+    }
+  }
+
+  if (watchtowerMenuOpen) {
+    // Check menu button clicks
+    let menuW = 220, menuH = 200;
+    let menuX = canvas.width / 2 - menuW / 2;
+    let menuY = canvas.height / 2 - menuH / 2;
+    let jobKeys = Object.keys(watchtowerJobs);
+    let totalAssigned = jobKeys.reduce((s, k) => s + watchtowerJobs[k].assigned, 0);
+    let available = village.population - totalAssigned;
+
+    for (let i = 0; i < jobKeys.length; i++) {
+      let job = watchtowerJobs[jobKeys[i]];
+      let btnY = menuY + 45 + i * 45;
+      // Plus button
+      if (mx > menuX + menuW - 55 && mx < menuX + menuW - 35 && my > btnY && my < btnY + 20) {
+        if (job.assigned < job.max && available > 0) {
+          job.assigned++;
+          notify(`Assigned ${job.name}!`);
+        }
+      }
+      // Minus button
+      if (mx > menuX + menuW - 30 && mx < menuX + menuW - 10 && my > btnY && my < btnY + 20) {
+        if (job.assigned > 0) {
+          job.assigned--;
+          notify(`Removed ${job.name}`);
+        }
+      }
+    }
+    // Close button
+    if (mx > menuX + menuW - 25 && mx < menuX + menuW - 5 && my > menuY + 5 && my < menuY + 25) {
+      watchtowerMenuOpen = false;
+    }
+    return;
+  }
+
+  // Check if clicked on quest NPC
+  if (questMenuOpen) {
+    let menuW = 260, menuH = 160;
+    let menuX = canvas.width / 2 - menuW / 2;
+    let menuY = canvas.height / 2 - menuH / 2;
+    // Close button
+    if (mx > menuX + menuW - 25 && mx < menuX + menuW - 5 && my > menuY + 5 && my < menuY + 25) {
+      questMenuOpen = false;
+      questMenuTarget = -1;
+    }
+    // Accept/Turn-in button
+    let btnX = menuX + menuW / 2 - 50;
+    let btnY = menuY + menuH - 40;
+    if (mx > btnX && mx < btnX + 100 && my > btnY && my < btnY + 28) {
+      let quest = activeQuests.find(q => q.giver === questMenuTarget);
+      if (quest && quest.done && !quest.turned_in) {
+        // Turn in - give reward
+        let emptySlot = inventory.slots.indexOf(null);
+        if (emptySlot !== -1) {
+          inventory.slots[emptySlot] = quest.reward;
+          notify(`Quest complete! Received ${ITEM_TYPES[quest.reward].name}!`);
+        } else {
+          notify(`Quest complete! But inventory full - ${ITEM_TYPES[quest.reward].name} dropped!`);
+          worldItems.push({ x: player.x + 20, y: player.y, type: quest.reward, collected: false });
+        }
+        quest.turned_in = true;
+        villagePeople[quest.giver].hasQuest = false;
+        questMenuOpen = false;
+        questMenuTarget = -1;
+      } else if (quest && quest.type === 'gather_food') {
+        // Try to hand in food from inventory
+        let needed = quest.need - quest.progress;
+        for (let i = 0; i < inventory.slots.length && needed > 0; i++) {
+          if (inventory.slots[i] === 'food') {
+            inventory.slots[i] = null;
+            quest.progress++;
+            needed--;
+          }
+        }
+        if (quest.progress >= quest.need) quest.done = true;
+      } else if (quest && quest.type === 'gather_medkit') {
+        // Try to hand in medkits from inventory
+        let needed = quest.need - quest.progress;
+        for (let i = 0; i < inventory.slots.length && needed > 0; i++) {
+          if (inventory.slots[i] === 'medkit') {
+            inventory.slots[i] = null;
+            quest.progress++;
+            needed--;
+          }
+        }
+        if (quest.progress >= quest.need) quest.done = true;
+      }
+    }
+    return;
+  }
+
+  // Check if clicked on a quest NPC in village
+  {
+    let worldX = mx + camX;
+    let worldY = my + camY;
+    let pInVillage = player.x > village.x && player.x < village.x + village.w && player.y > village.y && player.y < village.y + village.h;
+    if (pInVillage) {
+      for (let i = 0; i < villagePeople.length; i++) {
+        let vp = villagePeople[i];
+        if (!vp.hasQuest) continue;
+        if (Math.abs(worldX - vp.x) < 18 && Math.abs(worldY - vp.y) < 24) {
+          questMenuOpen = true;
+          questMenuTarget = i;
+          return;
+        }
+      }
+    }
+  }
+
+  // Check if clicked on watchtower building
+  let tower = village.buildings.find(b => b.name === 'Watchtower');
+  if (tower) {
+    let worldX = mx + camX;
+    let worldY = my + camY;
+    let pInVillage = player.x > village.x && player.x < village.x + village.w && player.y > village.y && player.y < village.y + village.h;
+    if (worldX > tower.x - 10 && worldX < tower.x + tower.w + 10 &&
+        worldY > tower.y - 20 && worldY < tower.y + tower.h + 10) {
+      if (pInVillage) {
+        watchtowerMenuOpen = true;
+      } else {
+        notify('Go to the village to use the Watchtower!');
+      }
+    }
+  }
+});
+window.addEventListener('keyup', e => { keys[e.key] = false; });
+
+// Notification system
+let notification = '';
+let notifyTimer = 0;
+function notify(msg) {
+  notification = msg;
+  notifyTimer = 180; // 3 seconds at 60fps
+}
+
+// Wolf collision check
+function wolfBlocked(wx, wy) {
+  if (wx < BORDER || wx > WORLD_W - BORDER || wy < BORDER || wy > WORLD_H - BORDER) return true;
+  if (inVillageZone(wx, wy)) return true;
+  if (nearRiver(wx, wy, RIVER_WIDTH * 0.5) && !onBridge(wx, wy)) return true;
+  for (const tree of trees) {
+    if (tree.size < 20) continue;
+    if (Math.hypot(wx - tree.x, wy - tree.y) < tree.size * 0.4) return true;
+  }
+  for (const c of clutter) {
+    if (Math.hypot(wx - c.x, wy - c.y) < c.size * 0.5) return true;
+  }
+  return false;
+}
+
+// Whip attack
+const whip = { active: false, timer: 0, x: 0, y: 0, endX: 0, endY: 0, length: 90 };
+window.addEventListener('keydown', e => {
+  let inVillage = player.x > village.x && player.x < village.x + village.w && player.y > village.y && player.y < village.y + village.h;
+  if ((e.key === 'f' || e.key === 'F') && !whip.active && !gameOver && !paused && !inVillage) {
+    whip.active = true;
+    whip.timer = 20;
+    // Direction based on player facing
+    let dx = 0, dy = 0;
+    if (player.facing === 'up') dy = -1;
+    else if (player.facing === 'down') dy = 1;
+    else if (player.facing === 'left') dx = -1;
+    else if (player.facing === 'right') dx = 1;
+    whip.x = player.x;
+    whip.y = player.y;
+    let range = whip.length;
+    whip.endX = player.x + dx * range;
+    whip.endY = player.y + dy * range;
+    // Check if whip hits any wolf
+    for (const wolf of wolves) {
+      // Check distance from wolf to whip line
+      let wdx = whip.endX - whip.x;
+      let wdy = whip.endY - whip.y;
+      let len2 = wdx * wdx + wdy * wdy;
+      let t = Math.max(0, Math.min(1, ((wolf.x - whip.x) * wdx + (wolf.y - whip.y) * wdy) / len2));
+      let projX = whip.x + t * wdx;
+      let projY = whip.y + t * wdy;
+      let dist = Math.hypot(wolf.x - projX, wolf.y - projY);
+      if (dist < 25) {
+        // Damage and knock wolf back
+        wolf.health--;
+        let kbAngle = Math.atan2(wolf.y - player.y, wolf.x - player.x);
+        wolf.x += Math.cos(kbAngle) * 40;
+        wolf.y += Math.sin(kbAngle) * 40;
+        wolf.x = Math.max(BORDER, Math.min(WORLD_W - BORDER, wolf.x));
+        wolf.y = Math.max(BORDER, Math.min(WORLD_H - BORDER, wolf.y));
+        wolf.state = 'wander';
+        wolf.angle = kbAngle;
+      }
+    }
+  }
+});
+
+// --- UPDATE ---
+function update() {
+  // Player movement
+  let dx = 0, dy = 0;
+  if (keys['ArrowLeft'] || keys['a'] || keys['A']) { dx = -1; player.facing = 'left'; }
+  if (keys['ArrowRight'] || keys['d'] || keys['D']) { dx = 1; player.facing = 'right'; }
+  if (keys['ArrowUp'] || keys['w'] || keys['W']) { dy = -1; player.facing = 'up'; }
+  if (keys['ArrowDown'] || keys['s'] || keys['S']) { dy = 1; player.facing = 'down'; }
+
+  // Close quest menu on movement
+  if ((dx !== 0 || dy !== 0) && questMenuOpen) {
+    questMenuOpen = false;
+    questMenuTarget = -1;
+  }
+
+  // Normalize diagonal movement
+  if (dx !== 0 && dy !== 0) {
+    dx *= 0.707;
+    dy *= 0.707;
+  }
+
+  let newX = player.x + dx * player.speed;
+  let newY = player.y + dy * player.speed;
+
+  // Simple tree collision
+  let blocked = false;
+  for (const tree of trees) {
+    if (tree.size < 20) continue; // only collide with big trees
+    let dist = Math.hypot(newX - tree.x, newY - tree.y);
+    if (dist < tree.size * 0.4) { blocked = true; break; }
+  }
+
+  // Log collision
+  if (!blocked) {
+    for (const c of clutter) {
+      let dist = Math.hypot(newX - c.x, newY - c.y);
+      if (dist < c.size * 0.5) { blocked = true; break; }
+    }
+  }
+
+  // River collision (bridges let you cross)
+  if (!blocked && nearRiver(newX, newY, RIVER_WIDTH * 0.4) && !onBridge(newX, newY)) {
+    blocked = true;
+  }
+
+  // Border forest collision
+  const BORDER = 150;
+  if (!blocked && (newX < BORDER || newX > WORLD_W - BORDER ||
+      newY < BORDER || newY > WORLD_H - BORDER)) {
+    blocked = true;
+  }
+
+  if (!blocked) {
+    player.x = Math.max(BORDER, Math.min(WORLD_W - BORDER, newX));
+    player.y = Math.max(BORDER, Math.min(WORLD_H - BORDER, newY));
+  }
+
+  // Camera follows player
+  camX = player.x - canvas.width / 2;
+  camY = player.y - canvas.height / 2;
+  camX = Math.max(0, Math.min(WORLD_W - canvas.width, camX));
+  camY = Math.max(0, Math.min(WORLD_H - canvas.height, camY));
+
+  // Check crash sites
+  for (const site of crashSites) {
+    if (site.rescued) continue;
+    let dist = Math.hypot(player.x - site.x, player.y - site.y);
+    if (dist < 60) {
+      site.rescued = true;
+      notify(`Rescued ${site.survivors} survivor${site.survivors > 1 ? 's' : ''} from ${site.type} crash!`);
+      for (let i = 0; i < site.survivors; i++) {
+        followers.push({
+          x: site.x + Math.random() * 20 - 10,
+          y: site.y + Math.random() * 20 - 10,
+          color: ['#c51111','#132ed1','#117f2d','#ed54ba','#ef7d0e','#f5f557','#3f474e','#d6e0f0','#6b2fbb','#71491e','#38fedb','#50ef39'][Math.floor(Math.random()*12)]
+        });
+      }
+      player.carrying += site.survivors;
+      document.getElementById('rescued').textContent =
+        crashSites.filter(s => s.rescued).reduce((sum, s) => sum + s.survivors, 0);
+    }
+  }
+
+  // Followers follow the player in a chain
+  for (let i = 0; i < followers.length; i++) {
+    let target = i === 0 ? player : followers[i - 1];
+    let fdx = target.x - followers[i].x;
+    let fdy = target.y - followers[i].y;
+    let fdist = Math.hypot(fdx, fdy);
+    let followDist = 35;
+    followers[i].moving = false;
+    if (fdist > followDist) {
+      followers[i].x += (fdx / fdist) * player.speed * 0.9;
+      followers[i].y += (fdy / fdist) * player.speed * 0.9;
+      followers[i].moving = true;
+    }
+  }
+
+  // Deliver followers to village
+  if (followers.length > 0 &&
+      player.x > village.x && player.x < village.x + village.w &&
+      player.y > village.y && player.y < village.y + village.h) {
+    let delivered = followers.length;
+    village.population += delivered;
+    notify(`Delivered ${delivered} survivor${delivered > 1 ? 's' : ''} to the village! Population: ${village.population}`);
+
+    // Update rescue quests
+    for (const q of activeQuests) {
+      if (!q.done && q.type === 'rescue_survivors') {
+        q.progress = Math.min(q.progress + delivered, q.need);
+        if (q.progress >= q.need) q.done = true;
+      }
+    }
+
+    // Place villagers
+    for (const f of followers) {
+      let vpIdx = villagePeople.length;
+      villagePeople.push({
+        x: village.x + 20 + Math.random() * (village.w - 40),
+        y: village.y + 20 + Math.random() * (village.h - 40),
+        color: f.color,
+        wanderAngle: Math.random() * Math.PI * 2,
+        hasQuest: false
+      });
+      // 60% chance this villager has a quest
+      if (Math.random() < 0.6) {
+        let tmpl = QUEST_TEMPLATES[Math.floor(Math.random() * QUEST_TEMPLATES.length)];
+        let need = tmpl.min + Math.floor(Math.random() * (tmpl.max - tmpl.min + 1));
+        let desc = tmpl.desc.replace('{n}', need);
+        activeQuests.push({
+          id: questIdCounter++,
+          giver: vpIdx,
+          desc: desc,
+          type: tmpl.type,
+          need: need,
+          progress: 0,
+          reward: tmpl.reward,
+          done: false,
+          turned_in: false
+        });
+        villagePeople[vpIdx].hasQuest = true;
+      }
+    }
+    followers.length = 0;
+    player.carrying = 0;
+    document.getElementById('village').textContent = village.population;
+
+    // Check for new buildings
+    for (const bt of buildingTypes) {
+      if (village.population >= bt.need && !village.buildings.find(b => b.name === bt.name)) {
+        // Find a position that doesn't overlap existing buildings
+        let placed = false;
+        let pad = 15; // spacing between buildings
+        for (let attempt = 0; attempt < 50; attempt++) {
+          let nx = village.x + 20 + Math.random() * (village.w - bt.w - 40);
+          let ny = village.y + 20 + Math.random() * (village.h - bt.h - 40);
+          let overlaps = false;
+          for (const eb of village.buildings) {
+            if (nx < eb.x + eb.w + pad && nx + bt.w + pad > eb.x &&
+                ny < eb.y + eb.h + pad && ny + bt.h + pad > eb.y) {
+              overlaps = true;
+              break;
+            }
+          }
+          if (!overlaps) {
+            village.buildings.push({
+              name: bt.name,
+              color: bt.color,
+              roofColor: bt.roofColor,
+              w: bt.w, h: bt.h,
+              x: nx, y: ny
+            });
+            placed = true;
+            break;
+          }
+        }
+        if (!placed) {
+          // Fallback: place in a grid-like position based on building count
+          let idx = village.buildings.length;
+          let col = idx % 2;
+          let row = Math.floor(idx / 2);
+          village.buildings.push({
+            name: bt.name,
+            color: bt.color,
+            roofColor: bt.roofColor,
+            w: bt.w, h: bt.h,
+            x: village.x + 20 + col * (village.w / 2 - 20),
+            y: village.y + 20 + row * 60
+          });
+        }
+        notify(`New building: ${bt.name}!`);
+      }
+    }
+  }
+
+  // Village people wander (avoid buildings)
+  for (const vp of villagePeople) {
+    if (!vp.stuckCount) vp.stuckCount = 0;
+    vp.wanderAngle += (Math.random() - 0.5) * 0.3;
+    let wx = vp.x + Math.cos(vp.wanderAngle) * 0.3;
+    let wy = vp.y + Math.sin(vp.wanderAngle) * 0.3;
+    // Stay inside village
+    let blocked = false;
+    if (wx <= village.x + 10 || wx >= village.x + village.w - 10) { vp.wanderAngle += Math.PI; blocked = true; }
+    if (wy <= village.y + 10 || wy >= village.y + village.h - 10) { vp.wanderAngle += Math.PI; blocked = true; }
+    // Don't walk through buildings
+    if (!blocked) {
+      for (const bl of village.buildings) {
+        let pad = 8;
+        if (wx > bl.x - pad && wx < bl.x + bl.w + pad &&
+            wy > bl.y - pad && wy < bl.y + bl.h + pad) {
+          blocked = true;
+          break;
+        }
+      }
+    }
+    if (blocked) {
+      vp.wanderAngle += Math.PI * 0.5 + Math.random() * Math.PI;
+      vp.stuckCount++;
+      // If stuck too many times, teleport to an open spot
+      if (vp.stuckCount > 30) {
+        for (let attempt = 0; attempt < 50; attempt++) {
+          let nx = village.x + 15 + Math.random() * (village.w - 30);
+          let ny = village.y + 15 + Math.random() * (village.h - 30);
+          let clear = true;
+          for (const bl of village.buildings) {
+            let pad = 12;
+            if (nx > bl.x - pad && nx < bl.x + bl.w + pad &&
+                ny > bl.y - pad && ny < bl.y + bl.h + pad) {
+              clear = false;
+              break;
+            }
+          }
+          if (clear) {
+            vp.x = nx;
+            vp.y = ny;
+            vp.stuckCount = 0;
+            vp.wanderAngle = Math.random() * Math.PI * 2;
+            break;
+          }
+        }
+      }
+    } else {
+      vp.x = wx;
+      vp.y = wy;
+      vp.stuckCount = 0;
+    }
+  }
+
+  // Smoke particles for crash sites
+  for (const site of crashSites) {
+    if (site.rescued) continue;
+    if (Math.random() < 0.1) {
+      site.smoke.push({ x: site.x, y: site.y - 10, life: 60, size: 3 + Math.random() * 5 });
+    }
+    for (let i = site.smoke.length - 1; i >= 0; i--) {
+      site.smoke[i].y -= 0.5;
+      site.smoke[i].x += (Math.random() - 0.5) * 0.5;
+      site.smoke[i].life--;
+      if (site.smoke[i].life <= 0) site.smoke.splice(i, 1);
+    }
+  }
+
+  if (notifyTimer > 0) notifyTimer--;
+
+  // Item pickup
+  for (const item of worldItems) {
+    if (item.collected) continue;
+    if (Math.hypot(player.x - item.x, player.y - item.y) < 25) {
+      // Find empty slot
+      let emptySlot = inventory.slots.indexOf(null);
+      if (emptySlot !== -1) {
+        inventory.slots[emptySlot] = item.type;
+        item.collected = true;
+        notify(`Picked up ${ITEM_TYPES[item.type].name}!`);
+      } else {
+        notify('Inventory full!');
+      }
+    }
+  }
+
+  // Speed boost timer
+  if (speedBoostTimer > 0) {
+    speedBoostTimer--;
+    player.speed = 5;
+  } else {
+    player.speed = 3;
+  }
+
+  // Whip timer
+  if (whip.active) {
+    whip.timer--;
+    if (whip.timer <= 0) whip.active = false;
+  }
+
+  // Wolf AI
+  if (player.hurtTimer > 0) player.hurtTimer--;
+  if (player.invincible > 0) player.invincible--;
+  const WOLF_ATTACK = 25;
+  let playerInVillage = player.x > village.x && player.x < village.x + village.w && player.y > village.y && player.y < village.y + village.h;
+
+  // Check if any pack member spotted the player — alert the whole pack
+  let alertedPacks = new Set();
+  for (const wolf of wolves) {
+    if (wolf.pack >= 0) {
+      let dist = Math.hypot(player.x - wolf.x, player.y - wolf.y);
+      if (dist < WOLF_DETECT && !playerInVillage) {
+        alertedPacks.add(wolf.pack);
+      }
+    }
+  }
+
+  for (const wolf of wolves) {
+    let distToPlayer = Math.hypot(player.x - wolf.x, player.y - wolf.y);
+
+    // Pack wolves get alerted if ANY packmate spotted the player
+    let isAlerted = (wolf.pack >= 0 && alertedPacks.has(wolf.pack));
+    let shouldChase = (distToPlayer < WOLF_DETECT || isAlerted) && !playerInVillage;
+
+    if (shouldChase) {
+      wolf.state = 'chase';
+      let chaseAngle = Math.atan2(player.y - wolf.y, player.x - wolf.x);
+
+      // Pack wolves try to flank — offset angle based on their index in pack
+      if (wolf.pack >= 0 && !wolf.isAlpha) {
+        let packmates = wolves.filter(w => w.pack === wolf.pack);
+        let myIdx = packmates.indexOf(wolf);
+        let flankOffset = (myIdx - 1) * 0.4; // spread out to surround
+        chaseAngle += flankOffset;
+      }
+
+      let chaseSpeed = wolf.speed * (wolf.isAlpha ? 1.5 : 1.3);
+      let nwx = wolf.x + Math.cos(chaseAngle) * chaseSpeed;
+      let nwy = wolf.y + Math.sin(chaseAngle) * chaseSpeed;
+      wolf.facing = Math.cos(chaseAngle) > 0 ? 'right' : 'left';
+      if (!wolfBlocked(nwx, nwy)) {
+        wolf.x = nwx;
+        wolf.y = nwy;
+      }
+
+      // Attack when close
+      if (distToPlayer < WOLF_ATTACK && player.invincible <= 0) {
+        wolf.state = 'attack';
+        wolf.attackTimer = 20;
+        if (shieldActive) {
+          shieldActive = false;
+          notify('Shield blocked the attack!');
+        } else {
+          player.health--;
+        }
+        player.hurtTimer = 30;
+        player.invincible = 60;
+        let kb = 15;
+        let kbAngle = Math.atan2(player.y - wolf.y, player.x - wolf.x);
+        player.x += Math.cos(kbAngle) * kb;
+        player.y += Math.sin(kbAngle) * kb;
+        player.x = Math.max(BORDER, Math.min(WORLD_W - BORDER, player.x));
+        player.y = Math.max(BORDER, Math.min(WORLD_H - BORDER, player.y));
+        if (player.health <= 0) {
+          player.health = 0;
+          gameOver = true;
+          followers.length = 0;
+          player.carrying = 0;
+        } else {
+          let packMsg = wolf.pack >= 0 ? 'The wolf pack attacked you!' : 'A wolf attacked you!';
+          notify(packMsg);
+        }
+      }
+    } else {
+      // Wander - pack wolves stay near each other
+      wolf.state = 'wander';
+      if (wolf.pack >= 0) {
+        // Find alpha of this pack
+        let alpha = wolves.find(w => w.pack === wolf.pack && w.isAlpha);
+        if (alpha && wolf !== alpha) {
+          // Follow alpha loosely
+          let distToAlpha = Math.hypot(alpha.x - wolf.x, alpha.y - wolf.y);
+          if (distToAlpha > 80) {
+            // Move toward alpha
+            let toAlpha = Math.atan2(alpha.y - wolf.y, alpha.x - wolf.x);
+            wolf.angle = toAlpha + (Math.random() - 0.5) * 0.5;
+          } else {
+            wolf.angle += (Math.random() - 0.5) * 0.3;
+          }
+        } else {
+          // Alpha wanders freely
+          wolf.angle += (Math.random() - 0.5) * 0.15;
+        }
+      } else {
+        wolf.angle += (Math.random() - 0.5) * 0.2;
+      }
+      let newWx = wolf.x + Math.cos(wolf.angle) * wolf.speed * 0.4;
+      let newWy = wolf.y + Math.sin(wolf.angle) * wolf.speed * 0.4;
+      wolf.facing = Math.cos(wolf.angle) > 0 ? 'right' : 'left';
+      if (!wolfBlocked(newWx, newWy)) {
+        wolf.x = newWx;
+        wolf.y = newWy;
+      } else {
+        wolf.angle += Math.PI;
+      }
+    }
+    if (wolf.attackTimer > 0) wolf.attackTimer--;
+  }
+  // Archer shooting - shoot at wolves near village
+  if (watchtowerJobs.archer.assigned > 0) {
+    let tower = village.buildings.find(b => b.name === 'Watchtower');
+    if (tower) {
+      let towerX = tower.x + tower.w / 2;
+      let towerY = tower.y + tower.h / 2;
+      let archerRange = 250;
+      // Shoot every 90 frames per archer
+      if (walkTimer % Math.max(30, 90 - watchtowerJobs.archer.assigned * 25) === 0) {
+        // Find closest wolf in range
+        let closestWolf = null, closestDist = archerRange;
+        for (const wolf of wolves) {
+          let d = Math.hypot(wolf.x - towerX, wolf.y - towerY);
+          if (d < closestDist) {
+            closestDist = d;
+            closestWolf = wolf;
+          }
+        }
+        if (closestWolf) {
+          arrows.push({
+            x: towerX, y: towerY - 40,
+            targetX: closestWolf.x, targetY: closestWolf.y,
+            speed: 5,
+            life: 60
+          });
+        }
+      }
+    }
+  }
+
+  // Update arrows
+  for (let i = arrows.length - 1; i >= 0; i--) {
+    let a = arrows[i];
+    let angle = Math.atan2(a.targetY - a.y, a.targetX - a.x);
+    a.x += Math.cos(angle) * a.speed;
+    a.y += Math.sin(angle) * a.speed;
+    a.life--;
+    // Hit wolf check
+    for (const wolf of wolves) {
+      if (Math.hypot(a.x - wolf.x, a.y - wolf.y) < 15) {
+        wolf.health--;
+        arrows.splice(i, 1);
+        break;
+      }
+    }
+    if (a.life <= 0) arrows.splice(i, 1);
+  }
+
+  // Remove dead wolves
+  for (let i = wolves.length - 1; i >= 0; i--) {
+    if (wolves[i].health <= 0) {
+      wolves.splice(i, 1);
+      wolfKillCount++;
+      // Update kill quests
+      for (const q of activeQuests) {
+        if (!q.done && q.type === 'kill_wolves') {
+          q.progress = Math.min(q.progress + 1, q.need);
+          if (q.progress >= q.need) q.done = true;
+        }
+      }
+    }
+  }
+
+  // Advance walk animation
+  if (dx !== 0 || dy !== 0) walkTimer++;
+}
+
+// --- DRAW ---
+function draw() {
+  // Jungle background
+  ctx.fillStyle = '#1a4d0a';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Grass variation
+  ctx.fillStyle = '#1e5a0e';
+  for (let gx = -camX % 50; gx < canvas.width; gx += 50) {
+    for (let gy = -camY % 50; gy < canvas.height; gy += 50) {
+      if ((Math.floor((gx + camX)/50) + Math.floor((gy + camY)/50)) % 2 === 0) {
+        ctx.fillRect(gx, gy, 50, 50);
+      }
+    }
+  }
+
+
+
+  ctx.save();
+  ctx.translate(-camX, -camY);
+
+  // Dense border forest - extends far beyond map edges so it looks infinite
+  ctx.fillStyle = '#0e3506';
+  let ext = 2000; // extension beyond map
+  ctx.fillRect(-ext, -ext, WORLD_W + ext * 2, BORDER + ext); // top
+  ctx.fillRect(-ext, WORLD_H - BORDER, WORLD_W + ext * 2, BORDER + ext); // bottom
+  ctx.fillRect(-ext, -ext, BORDER + ext, WORLD_H + ext * 2); // left
+  ctx.fillRect(WORLD_W - BORDER, -ext, BORDER + ext, WORLD_H + ext * 2); // right
+
+  // Border trees - dense packed canopies
+  for (const bt of borderTrees) {
+    // Trunk
+    ctx.fillStyle = '#3a2510';
+    ctx.fillRect(bt.x - 2, bt.y, 4, 8);
+    // Dense canopy
+    ctx.fillStyle = bt.shade;
+    ctx.beginPath();
+    ctx.arc(bt.x, bt.y - 3, bt.size * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+    // Darker overlay for depth
+    ctx.fillStyle = 'rgba(0,20,0,0.15)';
+    ctx.beginPath();
+    ctx.arc(bt.x + 2, bt.y - 1, bt.size * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Fade edge between border and playable area
+  // Top
+  let grd = ctx.createLinearGradient(0, BORDER - 30, 0, BORDER + 10);
+  grd.addColorStop(0, 'rgba(14,53,6,0.6)');
+  grd.addColorStop(1, 'rgba(14,53,6,0)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, BORDER - 30, WORLD_W, 40);
+  // Bottom
+  grd = ctx.createLinearGradient(0, WORLD_H - BORDER + 10, 0, WORLD_H - BORDER - 30);
+  grd.addColorStop(0, 'rgba(14,53,6,0.6)');
+  grd.addColorStop(1, 'rgba(14,53,6,0)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, WORLD_H - BORDER - 30, WORLD_W, 40);
+  // Left
+  grd = ctx.createLinearGradient(BORDER - 30, 0, BORDER + 10, 0);
+  grd.addColorStop(0, 'rgba(14,53,6,0.6)');
+  grd.addColorStop(1, 'rgba(14,53,6,0)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(BORDER - 30, 0, 40, WORLD_H);
+  // Right
+  grd = ctx.createLinearGradient(WORLD_W - BORDER + 10, 0, WORLD_W - BORDER - 30, 0);
+  grd.addColorStop(0, 'rgba(14,53,6,0.6)');
+  grd.addColorStop(1, 'rgba(14,53,6,0)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(WORLD_W - BORDER - 30, 0, 40, WORLD_H);
+
+  // Rivers
+  for (const river of rivers) {
+    if (river.length < 2) continue;
+
+    // River bank (slightly wider, darker)
+    ctx.strokeStyle = '#2a4a10';
+    ctx.lineWidth = RIVER_WIDTH + 8;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(river[0].x, river[0].y);
+    for (let i = 1; i < river.length; i++) {
+      let prev = river[i - 1];
+      let cur = river[i];
+      let mx = (prev.x + cur.x) / 2;
+      let my = (prev.y + cur.y) / 2;
+      ctx.quadraticCurveTo(prev.x, prev.y, mx, my);
+    }
+    ctx.stroke();
+
+    // Main water
+    ctx.strokeStyle = '#1a6aaa';
+    ctx.lineWidth = RIVER_WIDTH;
+    ctx.beginPath();
+    ctx.moveTo(river[0].x, river[0].y);
+    for (let i = 1; i < river.length; i++) {
+      let prev = river[i - 1];
+      let cur = river[i];
+      let mx = (prev.x + cur.x) / 2;
+      let my = (prev.y + cur.y) / 2;
+      ctx.quadraticCurveTo(prev.x, prev.y, mx, my);
+    }
+    ctx.stroke();
+
+    // Lighter center (shallow water look)
+    ctx.strokeStyle = 'rgba(60,160,220,0.4)';
+    ctx.lineWidth = RIVER_WIDTH * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(river[0].x, river[0].y);
+    for (let i = 1; i < river.length; i++) {
+      let prev = river[i - 1];
+      let cur = river[i];
+      let mx = (prev.x + cur.x) / 2;
+      let my = (prev.y + cur.y) / 2;
+      ctx.quadraticCurveTo(prev.x, prev.y, mx, my);
+    }
+    ctx.stroke();
+
+    // Animated water shimmer
+    let wt = Date.now() / 600;
+    ctx.strokeStyle = 'rgba(150,220,255,0.15)';
+    ctx.lineWidth = 2;
+    for (let i = 1; i < river.length - 1; i += 2) {
+      let p = river[i];
+      let shimX = Math.sin(wt + i) * 4;
+      ctx.beginPath();
+      ctx.moveTo(p.x + shimX - 6, p.y);
+      ctx.lineTo(p.x + shimX + 6, p.y);
+      ctx.stroke();
+    }
+  }
+
+  // Bridges
+  for (const br of bridges) {
+    ctx.save();
+    ctx.translate(br.x, br.y);
+    ctx.rotate(br.angle - Math.PI / 2);
+
+    // Bridge shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.beginPath();
+    ctx.ellipse(0, 2, br.w / 2 + 2, br.h / 2 + 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Side rails
+    ctx.fillStyle = '#5a3a15';
+    ctx.fillRect(-br.w / 2, -br.h / 2 - 2, br.w, 3);
+    ctx.fillRect(-br.w / 2, br.h / 2 - 1, br.w, 3);
+
+    // Planks
+    let plankCount = 7;
+    let plankGap = br.w / (plankCount + 1);
+    for (let p = 1; p <= plankCount; p++) {
+      let px = -br.w / 2 + p * plankGap;
+      let dark = p % 2 === 0;
+      ctx.fillStyle = dark ? '#8a6a3a' : '#9a7a4a';
+      ctx.fillRect(px - 2.5, -br.h / 2, 5, br.h);
+      // Plank grain
+      ctx.strokeStyle = 'rgba(60,40,10,0.15)';
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(px, -br.h / 2 + 2);
+      ctx.lineTo(px, br.h / 2 - 2);
+      ctx.stroke();
+    }
+
+    // Rail posts
+    ctx.fillStyle = '#4a2a10';
+    ctx.fillRect(-br.w / 2 + 1, -br.h / 2 - 5, 4, 6);
+    ctx.fillRect(br.w / 2 - 5, -br.h / 2 - 5, 4, 6);
+    ctx.fillRect(-br.w / 2 + 1, br.h / 2 - 1, 4, 6);
+    ctx.fillRect(br.w / 2 - 5, br.h / 2 - 1, 4, 6);
+
+    // Top rope/rail
+    ctx.strokeStyle = '#6a4a20';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(-br.w / 2 + 3, -br.h / 2 - 4);
+    ctx.quadraticCurveTo(0, -br.h / 2 - 1, br.w / 2 - 3, -br.h / 2 - 4);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-br.w / 2 + 3, br.h / 2 + 4);
+    ctx.quadraticCurveTo(0, br.h / 2 + 1, br.w / 2 - 3, br.h / 2 + 4);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  if (!inMainMenu) {
+  // Village area
+  ctx.fillStyle = 'rgba(80, 180, 60, 0.3)';
+  ctx.fillRect(village.x, village.y, village.w, village.h);
+  ctx.strokeStyle = '#5a5';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([8, 4]);
+  ctx.strokeRect(village.x, village.y, village.w, village.h);
+  ctx.setLineDash([]);
+
+  // Village label
+  ctx.fillStyle = '#aaffaa';
+  ctx.font = 'bold 14px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('VILLAGE', village.x + village.w/2, village.y - 8);
+
+  // Village buildings
+  for (const b of village.buildings) {
+    if (b.name === 'Campfire') {
+      let cx = b.x + b.w / 2;
+      let cy = b.y + b.h / 2;
+      let t = Date.now() / 100;
+
+      // Glow on ground
+      ctx.fillStyle = 'rgba(255,150,30,0.15)';
+      ctx.beginPath();
+      ctx.arc(cx, cy + 4, 22 + Math.sin(t * 0.7) * 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Ring of stones
+      for (let i = 0; i < 8; i++) {
+        let angle = (i / 8) * Math.PI * 2;
+        let sx = cx + Math.cos(angle) * 12;
+        let sy = cy + 3 + Math.sin(angle) * 7;
+        ctx.fillStyle = i % 2 === 0 ? '#666' : '#555';
+        ctx.beginPath();
+        ctx.ellipse(sx, sy, 4, 3, angle, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#444';
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+      }
+
+      // Logs
+      ctx.strokeStyle = '#5a3a1a';
+      ctx.lineWidth = 4;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(cx - 8, cy + 5);
+      ctx.lineTo(cx + 6, cy - 1);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(cx + 8, cy + 5);
+      ctx.lineTo(cx - 5, cy - 1);
+      ctx.stroke();
+      ctx.strokeStyle = '#4a2a10';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(cx - 2, cy + 6);
+      ctx.lineTo(cx + 1, cy - 3);
+      ctx.stroke();
+
+      // Embers at base
+      ctx.fillStyle = 'rgba(255,80,0,0.6)';
+      ctx.beginPath();
+      ctx.ellipse(cx, cy + 2, 6, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Flames - multiple flickering layers
+      // Outer flame
+      ctx.fillStyle = `rgba(255,${80 + Math.sin(t * 1.3) * 30},0,0.7)`;
+      ctx.beginPath();
+      ctx.moveTo(cx - 7, cy + 2);
+      ctx.quadraticCurveTo(cx - 8, cy - 10 + Math.sin(t * 1.1) * 3, cx - 2, cy - 18 + Math.sin(t * 0.9) * 4);
+      ctx.quadraticCurveTo(cx, cy - 12, cx + 2, cy - 20 + Math.sin(t * 1.4) * 3);
+      ctx.quadraticCurveTo(cx + 8, cy - 8 + Math.sin(t * 1.2) * 3, cx + 7, cy + 2);
+      ctx.closePath();
+      ctx.fill();
+
+      // Mid flame
+      ctx.fillStyle = `rgba(255,${160 + Math.sin(t * 1.5) * 30},0,0.8)`;
+      ctx.beginPath();
+      ctx.moveTo(cx - 5, cy + 1);
+      ctx.quadraticCurveTo(cx - 5, cy - 7 + Math.sin(t * 1.6) * 2, cx - 1, cy - 14 + Math.sin(t * 1.2) * 3);
+      ctx.quadraticCurveTo(cx + 1, cy - 8, cx + 1, cy - 15 + Math.sin(t * 0.8) * 3);
+      ctx.quadraticCurveTo(cx + 5, cy - 6 + Math.sin(t * 1.3) * 2, cx + 5, cy + 1);
+      ctx.closePath();
+      ctx.fill();
+
+      // Inner flame (bright yellow)
+      ctx.fillStyle = `rgba(255,255,${100 + Math.sin(t * 2) * 50},0.9)`;
+      ctx.beginPath();
+      ctx.moveTo(cx - 3, cy + 1);
+      ctx.quadraticCurveTo(cx - 2, cy - 5 + Math.sin(t * 1.8) * 2, cx, cy - 10 + Math.sin(t * 1.1) * 2);
+      ctx.quadraticCurveTo(cx + 2, cy - 4 + Math.sin(t * 1.5) * 2, cx + 3, cy + 1);
+      ctx.closePath();
+      ctx.fill();
+
+      // Sparks flying up
+      for (let sp = 0; sp < 3; sp++) {
+        let sparkT = (t * 0.8 + sp * 40) % 60;
+        if (sparkT < 30) {
+          let sparkX = cx + Math.sin(sp * 7 + t * 0.3) * 6;
+          let sparkY = cy - 15 - sparkT * 0.8;
+          let sparkAlpha = 1 - sparkT / 30;
+          ctx.fillStyle = `rgba(255,${200 + sp * 20},50,${sparkAlpha})`;
+          ctx.beginPath();
+          ctx.arc(sparkX, sparkY, 1.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      ctx.fillStyle = '#ddd';
+      ctx.font = '10px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText(b.name, cx, cy + b.h / 2 + 14);
+    } else if (b.name === 'Hut') {
+      let hx = b.x + b.w / 2;
+      let hy = b.y + b.h / 2;
+      let cw = 48;
+      let ch = 36;
+      let wallTop = hy - 6;
+      let wallBot = hy + ch / 2;
+
+      // Shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.15)';
+      ctx.beginPath();
+      ctx.ellipse(hx, wallBot + 4, cw / 2 + 4, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Stacked logs (horizontal)
+      let logCount = 5;
+      let logH = (wallBot - wallTop) / logCount;
+      for (let i = 0; i < logCount; i++) {
+        let ly = wallTop + i * logH;
+        let dark = i % 2 === 0;
+        ctx.fillStyle = dark ? '#7a5530' : '#8B6540';
+        ctx.beginPath();
+        ctx.roundRect(hx - cw / 2, ly, cw, logH + 0.5, 2);
+        ctx.fill();
+        // Log ends poking out on sides
+        ctx.fillStyle = dark ? '#6a4520' : '#7a5530';
+        ctx.beginPath();
+        ctx.arc(hx - cw / 2 - 2, ly + logH / 2, logH / 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(hx + cw / 2 + 2, ly + logH / 2, logH / 2, 0, Math.PI * 2);
+        ctx.fill();
+        // Wood grain
+        ctx.strokeStyle = 'rgba(50,30,10,0.2)';
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(hx - cw / 2 + 4, ly + logH / 2);
+        ctx.lineTo(hx + cw / 2 - 4, ly + logH / 2);
+        ctx.stroke();
+      }
+
+      // Door
+      ctx.fillStyle = '#3a1e08';
+      ctx.fillRect(hx - 5, wallTop + logH * 2, 10, logH * 3);
+      ctx.strokeStyle = '#5a3a18';
+      ctx.lineWidth = 0.8;
+      ctx.strokeRect(hx - 5, wallTop + logH * 2, 10, logH * 3);
+      ctx.fillStyle = '#aa8844';
+      ctx.beginPath();
+      ctx.arc(hx + 3, hy + 4, 1, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Window
+      ctx.fillStyle = '#88bbdd';
+      ctx.fillRect(hx + 10, wallTop + logH, 8, 7);
+      ctx.strokeStyle = '#5a3a18';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(hx + 10, wallTop + logH, 8, 7);
+      ctx.beginPath();
+      ctx.moveTo(hx + 14, wallTop + logH);
+      ctx.lineTo(hx + 14, wallTop + logH + 7);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(hx + 10, wallTop + logH + 3.5);
+      ctx.lineTo(hx + 18, wallTop + logH + 3.5);
+      ctx.stroke();
+
+      // Roof - A-frame
+      let roofPeak = wallTop - 14;
+      let roofOver = 6;
+      ctx.fillStyle = '#5a2a15';
+      ctx.beginPath();
+      ctx.moveTo(hx, roofPeak);
+      ctx.lineTo(hx - cw / 2 - roofOver, wallTop + 2);
+      ctx.lineTo(hx + cw / 2 + roofOver, wallTop + 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#3a1a0a';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // Chimney
+      ctx.fillStyle = '#666';
+      ctx.fillRect(hx + 10, roofPeak - 4, 6, 12);
+      ctx.strokeStyle = '#444';
+      ctx.lineWidth = 0.5;
+      ctx.strokeRect(hx + 10, roofPeak - 4, 6, 4);
+      ctx.strokeRect(hx + 10, roofPeak, 6, 4);
+      // Smoke
+      let st = Date.now() / 800;
+      ctx.fillStyle = 'rgba(140,140,140,0.25)';
+      ctx.beginPath();
+      ctx.arc(hx + 13, roofPeak - 8 + Math.sin(st) * 2, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(140,140,140,0.12)';
+      ctx.beginPath();
+      ctx.arc(hx + 14, roofPeak - 14 + Math.sin(st * 0.7) * 2, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#ddd';
+      ctx.font = '10px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('Cabin', hx, wallBot + 14);
+    } else if (b.name === 'Medical Tent') {
+      let mx = b.x + b.w / 2;
+      let my = b.y + b.h / 2;
+      let tw = 54;
+      let th = 36;
+
+      // Shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.12)';
+      ctx.beginPath();
+      ctx.ellipse(mx, my + th / 2 + 3, tw / 2 + 4, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Support poles (visible at sides)
+      ctx.strokeStyle = '#8a8a8a';
+      ctx.lineWidth = 2;
+      // Left pole
+      ctx.beginPath();
+      ctx.moveTo(mx - tw / 2 + 2, my + th / 2);
+      ctx.lineTo(mx - tw / 2 + 2, my - 8);
+      ctx.stroke();
+      // Right pole
+      ctx.beginPath();
+      ctx.moveTo(mx + tw / 2 - 2, my + th / 2);
+      ctx.lineTo(mx + tw / 2 - 2, my - 8);
+      ctx.stroke();
+      // Center pole (taller, creates peak)
+      ctx.beginPath();
+      ctx.moveTo(mx, my + th / 2);
+      ctx.lineTo(mx, my - 18);
+      ctx.stroke();
+
+      // Back wall of tent
+      ctx.fillStyle = '#e8e0d0';
+      ctx.beginPath();
+      ctx.moveTo(mx - tw / 2, my + th / 2);
+      ctx.lineTo(mx - tw / 2, my - 6);
+      ctx.lineTo(mx, my - 16);
+      ctx.lineTo(mx + tw / 2, my - 6);
+      ctx.lineTo(mx + tw / 2, my + th / 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#b0a890';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // Tent canvas - front face (slightly different shade)
+      ctx.fillStyle = '#f0e8d8';
+      ctx.beginPath();
+      ctx.moveTo(mx - tw / 2, my + th / 2);
+      ctx.lineTo(mx - tw / 2, my - 6);
+      ctx.lineTo(mx, my - 16);
+      ctx.lineTo(mx, my + th / 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#b0a890';
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+
+      // Canvas wrinkle lines
+      ctx.strokeStyle = 'rgba(150,140,120,0.3)';
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(mx - tw / 4, my - 10);
+      ctx.lineTo(mx - tw / 4 - 2, my + th / 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(mx + tw / 4, my - 10);
+      ctx.lineTo(mx + tw / 4 + 2, my + th / 2);
+      ctx.stroke();
+
+      // Tent opening (front flap open)
+      ctx.fillStyle = '#2a2018';
+      ctx.beginPath();
+      ctx.moveTo(mx - 8, my + th / 2);
+      ctx.lineTo(mx - 6, my);
+      ctx.lineTo(mx + 6, my);
+      ctx.lineTo(mx + 8, my + th / 2);
+      ctx.closePath();
+      ctx.fill();
+
+      // Open flap (folded to the side)
+      ctx.fillStyle = '#e0d8c8';
+      ctx.beginPath();
+      ctx.moveTo(mx + 8, my + th / 2);
+      ctx.lineTo(mx + 6, my);
+      ctx.lineTo(mx + 14, my + 4);
+      ctx.lineTo(mx + 14, my + th / 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#b0a890';
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+
+      // Guy ropes (holding tent down)
+      ctx.strokeStyle = '#8a7a60';
+      ctx.lineWidth = 0.8;
+      ctx.setLineDash([3, 3]);
+      // Left rope
+      ctx.beginPath();
+      ctx.moveTo(mx - tw / 2, my - 6);
+      ctx.lineTo(mx - tw / 2 - 10, my + th / 2 + 2);
+      ctx.stroke();
+      // Right rope
+      ctx.beginPath();
+      ctx.moveTo(mx + tw / 2, my - 6);
+      ctx.lineTo(mx + tw / 2 + 10, my + th / 2 + 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Rope pegs
+      ctx.fillStyle = '#6a5a40';
+      ctx.fillRect(mx - tw / 2 - 11, my + th / 2, 3, 4);
+      ctx.fillRect(mx + tw / 2 + 9, my + th / 2, 3, 4);
+
+      // Red cross on the tent
+      ctx.fillStyle = '#cc2222';
+      // Horizontal bar
+      ctx.fillRect(mx - 8, my - 11, 16, 5);
+      // Vertical bar
+      ctx.fillRect(mx - 3, my - 16, 5, 16);
+
+      // Small red cross flag on top
+      ctx.strokeStyle = '#888';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(mx, my - 16);
+      ctx.lineTo(mx, my - 24);
+      ctx.stroke();
+      // Flag
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(mx, my - 24, 8, 6);
+      ctx.fillStyle = '#cc2222';
+      ctx.fillRect(mx + 2, my - 23, 4, 1.5);
+      ctx.fillRect(mx + 3, my - 24, 1.5, 4);
+
+      ctx.fillStyle = '#ddd';
+      ctx.font = '10px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('Medical', mx, my + th / 2 + 14);
+    } else if (b.name === 'Watchtower') {
+      let wx = b.x + b.w / 2;
+      let wy = b.y + b.h / 2;
+      let baseW = 26;
+      let topW = 18;
+      let towerH = 55;
+      let platY = wy - towerH + 15;
+
+      // Shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.15)';
+      ctx.beginPath();
+      ctx.ellipse(wx, wy + 5, 16, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Four legs (tapered)
+      ctx.strokeStyle = '#5a3a15';
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      // Back legs
+      ctx.beginPath();
+      ctx.moveTo(wx - baseW / 2, wy + 3);
+      ctx.lineTo(wx - topW / 2 + 1, platY + 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(wx + baseW / 2, wy + 3);
+      ctx.lineTo(wx + topW / 2 - 1, platY + 2);
+      ctx.stroke();
+      // Front legs
+      ctx.strokeStyle = '#4a2a0a';
+      ctx.beginPath();
+      ctx.moveTo(wx - baseW / 2 + 4, wy + 3);
+      ctx.lineTo(wx - topW / 2 + 3, platY + 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(wx + baseW / 2 - 4, wy + 3);
+      ctx.lineTo(wx + topW / 2 - 3, platY + 2);
+      ctx.stroke();
+
+      // Cross braces
+      ctx.strokeStyle = '#5a3a15';
+      ctx.lineWidth = 1.5;
+      // X brace lower
+      let midY1 = wy - towerH * 0.25 + 10;
+      let midW1 = baseW / 2 - (baseW - topW) / 2 * 0.25;
+      ctx.beginPath();
+      ctx.moveTo(wx - midW1, midY1 + 8);
+      ctx.lineTo(wx + midW1 - 2, midY1 - 8);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(wx + midW1, midY1 + 8);
+      ctx.lineTo(wx - midW1 + 2, midY1 - 8);
+      ctx.stroke();
+      // X brace upper
+      let midY2 = wy - towerH * 0.55 + 10;
+      let midW2 = topW / 2 + 2;
+      ctx.beginPath();
+      ctx.moveTo(wx - midW2, midY2 + 6);
+      ctx.lineTo(wx + midW2 - 2, midY2 - 6);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(wx + midW2, midY2 + 6);
+      ctx.lineTo(wx - midW2 + 2, midY2 - 6);
+      ctx.stroke();
+
+      // Ladder rungs
+      ctx.strokeStyle = '#6a4a25';
+      ctx.lineWidth = 1;
+      for (let r = 0; r < 7; r++) {
+        let ry = wy - r * (towerH - 15) / 7;
+        let rw = baseW / 2 - (baseW - topW) / 2 * (r / 7) - 6;
+        ctx.beginPath();
+        ctx.moveTo(wx - 2, ry);
+        ctx.lineTo(wx + 2, ry);
+        ctx.stroke();
+      }
+      // Ladder side rails
+      ctx.strokeStyle = '#5a3a15';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(wx - 2, wy + 3);
+      ctx.lineTo(wx - 1, platY + 5);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(wx + 2, wy + 3);
+      ctx.lineTo(wx + 1, platY + 5);
+      ctx.stroke();
+
+      // Platform
+      ctx.fillStyle = '#7a5a30';
+      ctx.fillRect(wx - topW / 2 - 4, platY, topW + 8, 4);
+      // Platform planks
+      ctx.strokeStyle = '#5a3a15';
+      ctx.lineWidth = 0.5;
+      for (let p = 0; p < 5; p++) {
+        let px = wx - topW / 2 - 3 + p * (topW + 6) / 4;
+        ctx.beginPath();
+        ctx.moveTo(px, platY);
+        ctx.lineTo(px, platY + 4);
+        ctx.stroke();
+      }
+
+      // Railing
+      ctx.strokeStyle = '#5a3a15';
+      ctx.lineWidth = 1.5;
+      let railH = 10;
+      // Railing posts
+      ctx.beginPath();
+      ctx.moveTo(wx - topW / 2 - 3, platY);
+      ctx.lineTo(wx - topW / 2 - 3, platY - railH);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(wx + topW / 2 + 3, platY);
+      ctx.lineTo(wx + topW / 2 + 3, platY - railH);
+      ctx.stroke();
+      // Top rail
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(wx - topW / 2 - 3, platY - railH);
+      ctx.lineTo(wx + topW / 2 + 3, platY - railH);
+      ctx.stroke();
+      // Mid rail
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(wx - topW / 2 - 3, platY - railH / 2);
+      ctx.lineTo(wx + topW / 2 + 3, platY - railH / 2);
+      ctx.stroke();
+
+      // Roof - small pointed wooden roof
+      ctx.fillStyle = '#5a2a15';
+      ctx.beginPath();
+      ctx.moveTo(wx, platY - railH - 12);
+      ctx.lineTo(wx - topW / 2 - 5, platY - railH + 1);
+      ctx.lineTo(wx + topW / 2 + 5, platY - railH + 1);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#3a1a0a';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // Flag on top
+      ctx.strokeStyle = '#4a2a10';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(wx, platY - railH - 12);
+      ctx.lineTo(wx, platY - railH - 22);
+      ctx.stroke();
+      // Flag cloth
+      let ft = Date.now() / 300;
+      ctx.fillStyle = '#cc3333';
+      ctx.beginPath();
+      ctx.moveTo(wx, platY - railH - 22);
+      ctx.lineTo(wx + 8 + Math.sin(ft) * 1.5, platY - railH - 19);
+      ctx.lineTo(wx + 7 + Math.sin(ft + 1) * 1.5, platY - railH - 16);
+      ctx.lineTo(wx, platY - railH - 16);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#ddd';
+      ctx.font = '10px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText(b.name, wx, wy + 14);
+    } else {
+      ctx.fillStyle = b.color;
+      ctx.fillRect(b.x, b.y, b.w, b.h);
+      ctx.fillStyle = b.roofColor;
+      ctx.fillRect(b.x - 3, b.y - 6, b.w + 6, 8);
+      ctx.fillStyle = '#fff';
+      ctx.font = '10px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText(b.name, b.x + b.w/2, b.y + b.h + 12);
+    }
+  }
+
+  // Village people
+  for (let vi = 0; vi < villagePeople.length; vi++) {
+    let vp = villagePeople[vi];
+    drawBean(vp.x, vp.y, 14, vp.color, 'down', false, true);
+    // Quest indicator "!" above NPC
+    if (vp.hasQuest) {
+      let quest = activeQuests.find(q => q.giver === vi);
+      let bob = Math.sin(Date.now() / 300) * 2;
+      if (quest && quest.done && !quest.turned_in) {
+        // Ready to turn in - green "?"
+        ctx.fillStyle = '#44ff44';
+        ctx.font = 'bold 16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('?', vp.x, vp.y - 20 + bob);
+      } else if (quest && !quest.turned_in) {
+        // Has active quest - yellow "!"
+        ctx.fillStyle = '#ffdd00';
+        ctx.font = 'bold 16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('!', vp.x, vp.y - 20 + bob);
+      }
+    }
+  }
+
+  } // end !inMainMenu village block
+
+  // Ground clutter - logs and bushes
+  for (const c of clutter) {
+    if (c.type === 'log') {
+      ctx.save();
+      ctx.translate(c.x, c.y);
+      ctx.rotate(c.angle);
+      let len = c.size * 1.5;
+      // Log body
+      ctx.fillStyle = '#5a3a18';
+      ctx.beginPath();
+      ctx.roundRect(-len / 2, -3, len, 6, 3);
+      ctx.fill();
+      // Bark texture
+      ctx.strokeStyle = '#4a2a0a';
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(-len / 2 + 3, -1);
+      ctx.lineTo(len / 2 - 3, -1);
+      ctx.stroke();
+      // End grain circles
+      ctx.fillStyle = '#7a5a30';
+      ctx.beginPath();
+      ctx.ellipse(-len / 2, 0, 3, 3.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#6a4a20';
+      ctx.beginPath();
+      ctx.ellipse(len / 2, 0, 3, 3.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Ring on end grain
+      ctx.strokeStyle = '#4a2a10';
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.arc(-len / 2, 0, 1.5, 0, Math.PI * 2);
+      ctx.stroke();
+      // Small branch sticking out
+      ctx.strokeStyle = '#5a3a18';
+      ctx.lineWidth = 1.5;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(len * 0.15, -3);
+      ctx.lineTo(len * 0.2, -8);
+      ctx.stroke();
+      ctx.restore();
+    } else {
+      // Bush
+      let s = c.size;
+      // Shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.1)';
+      ctx.beginPath();
+      ctx.ellipse(c.x, c.y + s * 0.2, s * 0.5, s * 0.15, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Bush layers
+      ctx.fillStyle = c.shade;
+      ctx.beginPath();
+      ctx.arc(c.x - s * 0.15, c.y - s * 0.05, s * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(c.x + s * 0.15, c.y, s * 0.3, 0, Math.PI * 2);
+      ctx.fill();
+      // Top layer (brighter)
+      let r = parseInt(c.shade.slice(4));
+      ctx.fillStyle = `rgb(${Math.min(80, r + 15)}, ${parseInt(c.shade.split(',')[1]) + 20}, ${parseInt(c.shade.split(',')[2]) + 10})`;
+      ctx.beginPath();
+      ctx.arc(c.x, c.y - s * 0.12, s * 0.3, 0, Math.PI * 2);
+      ctx.fill();
+      // Small flowers/berries on some bushes
+      if (c.size > 14) {
+        let berryColor = c.x % 3 < 1 ? '#cc3333' : c.x % 3 < 2 ? '#dddd44' : '#dd88cc';
+        ctx.fillStyle = berryColor;
+        for (let b = 0; b < 3; b++) {
+          let bx = c.x + Math.sin(b * 2.5 + c.x) * s * 0.2;
+          let by = c.y - s * 0.1 + Math.cos(b * 3 + c.y) * s * 0.15;
+          ctx.beginPath();
+          ctx.arc(bx, by, 1.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+  }
+
+  // Trees (behind player)
+  for (const tree of trees) {
+    let s = tree.size;
+    let tx = tree.x, ty = tree.y;
+
+    if (tree.type === 0) {
+      // PALM TREE
+      let trunkH = s * 1.3;
+      let wind = Math.sin(Date.now() / 1800 + tree.sway) * 2.5;
+      let curve = s * 0.18 + wind;
+
+      // Shadow on ground
+      ctx.fillStyle = 'rgba(0,0,0,0.12)';
+      ctx.beginPath();
+      ctx.ellipse(tx + curve * 0.3, ty + 6, s * 0.4, s * 0.1, 0.2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Trunk - textured with gradient
+      ctx.lineWidth = s * 0.14;
+      ctx.lineCap = 'round';
+      // Trunk shadow side
+      ctx.strokeStyle = '#5a4020';
+      ctx.beginPath();
+      ctx.moveTo(tx + 1, ty + 5);
+      ctx.quadraticCurveTo(tx + curve + 1, ty - trunkH * 0.5, tx + curve * 0.5 + 1, ty - trunkH);
+      ctx.stroke();
+      // Main trunk
+      ctx.strokeStyle = '#7a6040';
+      ctx.beginPath();
+      ctx.moveTo(tx, ty + 5);
+      ctx.quadraticCurveTo(tx + curve, ty - trunkH * 0.5, tx + curve * 0.5, ty - trunkH);
+      ctx.stroke();
+      // Trunk rings
+      ctx.strokeStyle = '#5a4020';
+      ctx.lineWidth = 1;
+      for (let seg = 0; seg < 8; seg++) {
+        let t = seg / 8;
+        let sx = tx + curve * Math.sin(t * Math.PI) * 0.85;
+        let sy = ty + 5 - trunkH * t;
+        ctx.beginPath();
+        ctx.moveTo(sx - s * 0.07, sy);
+        ctx.lineTo(sx + s * 0.07, sy);
+        ctx.stroke();
+      }
+      // Highlight on trunk
+      ctx.strokeStyle = 'rgba(180,150,100,0.15)';
+      ctx.lineWidth = s * 0.04;
+      ctx.beginPath();
+      ctx.moveTo(tx - 1, ty + 3);
+      ctx.quadraticCurveTo(tx + curve - 1, ty - trunkH * 0.5, tx + curve * 0.5 - 1, ty - trunkH);
+      ctx.stroke();
+
+      let topX = tx + curve * 0.5;
+      let topY = ty - trunkH;
+
+      // Coconut cluster
+      ctx.fillStyle = '#6a4a18';
+      ctx.beginPath(); ctx.arc(topX - 3, topY + 4, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(topX + 3, topY + 5, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(topX, topY + 6, 2.5, 0, Math.PI * 2); ctx.fill();
+      // Coconut highlights
+      ctx.fillStyle = 'rgba(255,255,200,0.15)';
+      ctx.beginPath(); ctx.arc(topX - 4, topY + 3, 1.5, 0, Math.PI * 2); ctx.fill();
+
+      // Palm fronds - more detailed
+      let frondCount = 7;
+      for (let f = 0; f < frondCount; f++) {
+        let angle = (f / frondCount) * Math.PI * 2 + tree.x * 0.01;
+        let frondLen = s * 0.8;
+        let droop = 0.25; // how much fronds droop
+        let fx = topX + Math.cos(angle) * frondLen;
+        let fy = topY + Math.sin(angle) * frondLen * 0.5 + frondLen * droop;
+        let midX = topX + Math.cos(angle) * frondLen * 0.45;
+        let midY = topY + Math.sin(angle) * frondLen * 0.15 - frondLen * 0.18;
+
+        // Frond spine
+        ctx.strokeStyle = '#2a5a0a';
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(topX, topY);
+        ctx.quadraticCurveTo(midX, midY, fx, fy);
+        ctx.stroke();
+
+        // Individual leaflets along spine
+        for (let lf = 0.15; lf < 1; lf += 0.1) {
+          let lx = topX + (midX - topX) * lf * 2 * Math.min(lf, 0.5) + (fx - topX) * Math.max(0, lf - 0.5) * 2 * 0.5;
+          let ly = topY + (midY - topY) * lf * 2 * Math.min(lf, 0.5) + (fy - topY) * Math.max(0, lf - 0.5) * 2 * 0.5;
+          let leafLen = s * 0.14 * (1 - lf * 0.5);
+          // Two leaves at each point (left and right)
+          ctx.fillStyle = lf < 0.5 ? tree.shade : `rgb(${parseInt(tree.shade.slice(4)) + 10}, ${parseInt(tree.shade.split(',')[1]) + 10}, ${parseInt(tree.shade.split(',')[2]) + 5})`;
+          ctx.beginPath();
+          ctx.ellipse(lx, ly, leafLen, s * 0.03, angle + 0.5 + lf * 0.2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.ellipse(lx, ly, leafLen, s * 0.03, angle - 0.5 - lf * 0.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+    } else if (tree.type === 1) {
+      // BIG JUNGLE TREE
+      let trunkH = s * 0.95;
+      let wind = Math.sin(Date.now() / 2000 + tree.sway) * 1.5;
+
+      // Ground shadow - larger, softer, offset by wind
+      ctx.fillStyle = 'rgba(0,0,0,0.18)';
+      ctx.beginPath();
+      ctx.ellipse(tx + wind * 0.5, ty + 7, s * 0.55, s * 0.14, 0.1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,0.08)';
+      ctx.beginPath();
+      ctx.ellipse(tx + wind, ty + 7, s * 0.7, s * 0.18, 0.1, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Buttress roots - spreading, 3D look
+      for (let r = 0; r < 5; r++) {
+        let ra = (r / 5) * Math.PI * 1.2 - 0.4 + tx * 0.01;
+        let rootLen = s * (0.2 + Math.sin(r * 2.1 + tx) * 0.08);
+        // Root shadow
+        ctx.fillStyle = '#3a2508';
+        ctx.beginPath();
+        ctx.moveTo(tx + Math.cos(ra) * s * 0.07, ty + 3);
+        ctx.quadraticCurveTo(tx + Math.cos(ra) * rootLen * 0.6, ty + 3, tx + Math.cos(ra) * rootLen, ty + 9);
+        ctx.lineTo(tx + Math.cos(ra) * rootLen * 0.6, ty + 9);
+        ctx.quadraticCurveTo(tx + Math.cos(ra) * rootLen * 0.3, ty + 5, tx + Math.cos(ra) * s * 0.03, ty + 3);
+        ctx.closePath();
+        ctx.fill();
+        // Root main
+        ctx.fillStyle = '#4a3010';
+        ctx.beginPath();
+        ctx.moveTo(tx + Math.cos(ra) * s * 0.06, ty + 2);
+        ctx.quadraticCurveTo(tx + Math.cos(ra) * rootLen * 0.6, ty + 1, tx + Math.cos(ra) * rootLen, ty + 8);
+        ctx.lineTo(tx + Math.cos(ra) * rootLen * 0.65, ty + 8);
+        ctx.quadraticCurveTo(tx + Math.cos(ra) * rootLen * 0.3, ty + 3, tx + Math.cos(ra) * s * 0.03, ty + 2);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      // Trunk - thick, gnarled, with moss
+      let trunkW = s * 0.12;
+      // Shadow side
+      ctx.fillStyle = '#3a2508';
+      ctx.beginPath();
+      ctx.moveTo(tx - trunkW + 2, ty + 5);
+      ctx.bezierCurveTo(tx - trunkW + 1, ty - trunkH * 0.4, tx - trunkW * 0.7 + 2, ty - trunkH * 0.7, tx - trunkW * 0.6 + wind * 0.3, ty - trunkH);
+      ctx.lineTo(tx + trunkW * 0.8 + wind * 0.3, ty - trunkH);
+      ctx.bezierCurveTo(tx + trunkW + 1, ty - trunkH * 0.7, tx + trunkW + 2, ty - trunkH * 0.4, tx + trunkW + 2, ty + 5);
+      ctx.closePath();
+      ctx.fill();
+      // Main trunk
+      ctx.fillStyle = '#5a3a15';
+      ctx.beginPath();
+      ctx.moveTo(tx - trunkW, ty + 5);
+      ctx.bezierCurveTo(tx - trunkW, ty - trunkH * 0.4, tx - trunkW * 0.7, ty - trunkH * 0.7, tx - trunkW * 0.6 + wind * 0.3, ty - trunkH);
+      ctx.lineTo(tx + trunkW * 0.7 + wind * 0.3, ty - trunkH);
+      ctx.bezierCurveTo(tx + trunkW, ty - trunkH * 0.7, tx + trunkW, ty - trunkH * 0.4, tx + trunkW, ty + 5);
+      ctx.closePath();
+      ctx.fill();
+
+      // Bark texture - knots and lines
+      ctx.strokeStyle = '#4a2a0a';
+      ctx.lineWidth = 0.6;
+      for (let b = 0; b < 5; b++) {
+        let bx = tx - trunkW * 0.6 + b * trunkW * 0.35;
+        let wobble = Math.sin(b * 2.3 + tx) * 1.5;
+        ctx.beginPath();
+        ctx.bezierCurveTo(bx + wobble, ty + 3, bx - wobble, ty - trunkH * 0.5, bx + wobble * 0.5 + wind * 0.15, ty - trunkH + 4);
+        ctx.moveTo(bx, ty + 3);
+        ctx.bezierCurveTo(bx + wobble, ty - trunkH * 0.3, bx - wobble, ty - trunkH * 0.6, bx + wind * 0.15, ty - trunkH + 4);
+        ctx.stroke();
+      }
+      // Knots
+      ctx.fillStyle = '#3a2208';
+      ctx.beginPath(); ctx.ellipse(tx - 1, ty - trunkH * 0.35, 3, 2.5, 0.3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#2a1808';
+      ctx.beginPath(); ctx.ellipse(tx - 1, ty - trunkH * 0.35, 1.5, 1.2, 0.3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#3a2208';
+      ctx.beginPath(); ctx.ellipse(tx + 2, ty - trunkH * 0.6, 2, 1.8, -0.2, 0, Math.PI * 2); ctx.fill();
+
+      // Moss patches on trunk
+      ctx.fillStyle = 'rgba(50,100,30,0.3)';
+      ctx.beginPath(); ctx.ellipse(tx - trunkW * 0.4, ty - trunkH * 0.2, 4, 6, 0.2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(40,90,25,0.25)';
+      ctx.beginPath(); ctx.ellipse(tx + trunkW * 0.3, ty - trunkH * 0.5, 3, 5, -0.1, 0, Math.PI * 2); ctx.fill();
+
+      // Bark highlight (light side)
+      ctx.strokeStyle = 'rgba(140,110,70,0.15)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(tx - trunkW * 0.5, ty + 3);
+      ctx.bezierCurveTo(tx - trunkW * 0.5, ty - trunkH * 0.4, tx - trunkW * 0.3, ty - trunkH * 0.7, tx - trunkW * 0.3 + wind * 0.15, ty - trunkH + 5);
+      ctx.stroke();
+
+      // Branches
+      ctx.strokeStyle = '#5a3a15';
+      ctx.lineWidth = 3.5;
+      ctx.lineCap = 'round';
+      let bTopX = tx + wind * 0.3;
+      let bTopY = ty - trunkH;
+      // Branch 1 - right
+      ctx.beginPath();
+      ctx.moveTo(bTopX + s * 0.04, bTopY + trunkH * 0.15);
+      ctx.quadraticCurveTo(bTopX + s * 0.2 + wind, bTopY + trunkH * 0.05, bTopX + s * 0.3 + wind * 1.5, bTopY + trunkH * 0.1);
+      ctx.stroke();
+      // Branch 2 - left
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(bTopX - s * 0.03, bTopY + trunkH * 0.1);
+      ctx.quadraticCurveTo(bTopX - s * 0.18 + wind, bTopY - trunkH * 0.05, bTopX - s * 0.28 + wind * 1.5, bTopY + trunkH * 0.02);
+      ctx.stroke();
+      // Branch 3 - up-right
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(bTopX, bTopY);
+      ctx.quadraticCurveTo(bTopX + s * 0.1 + wind, bTopY - s * 0.15, bTopX + s * 0.15 + wind * 1.5, bTopY - s * 0.12);
+      ctx.stroke();
+
+      // Vines - hanging from branches, swaying
+      ctx.strokeStyle = '#3a7a20';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(bTopX + s * 0.25 + wind, bTopY + trunkH * 0.08);
+      ctx.quadraticCurveTo(bTopX + s * 0.3 + wind * 0.5, ty - trunkH * 0.3, bTopX + s * 0.2 + wind * 0.3, ty + 2);
+      ctx.stroke();
+      ctx.strokeStyle = '#2a6a15';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(bTopX - s * 0.2 + wind, bTopY + trunkH * 0.01);
+      ctx.quadraticCurveTo(bTopX - s * 0.28 + wind * 0.4, ty - trunkH * 0.3, bTopX - s * 0.24 + wind * 0.2, ty - 5);
+      ctx.stroke();
+      // Vine with leaves
+      ctx.strokeStyle = '#357a18';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(bTopX + s * 0.05 + wind, bTopY - s * 0.1);
+      ctx.bezierCurveTo(bTopX + s * 0.1 + wind * 0.6, ty - trunkH * 0.5, bTopX + s * 0.05 + wind * 0.3, ty - trunkH * 0.2, bTopX + s * 0.08 + wind * 0.2, ty - 2);
+      ctx.stroke();
+
+      // CANOPY - swaying with wind, many layers for depth
+      let canopyY = bTopY;
+      let cx = bTopX + wind * 0.8;
+
+      // Canopy shadow on ground (cast shadow)
+      ctx.fillStyle = 'rgba(0,15,0,0.1)';
+      ctx.beginPath();
+      ctx.ellipse(tx + wind * 3, ty + 5, s * 0.5, s * 0.12, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Bottom canopy layer (darkest - underside)
+      ctx.fillStyle = `rgb(${parseInt(tree.shade.slice(4)) - 15}, ${parseInt(tree.shade.split(',')[1]) - 10}, ${parseInt(tree.shade.split(',')[2]) - 8})`;
+      ctx.beginPath(); ctx.arc(cx - s * 0.15, canopyY + 8, s * 0.3, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx + s * 0.18, canopyY + 7, s * 0.28, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx, canopyY + 10, s * 0.25, 0, Math.PI * 2); ctx.fill();
+
+      // Back layer
+      ctx.fillStyle = tree.shade;
+      ctx.beginPath(); ctx.arc(cx - s * 0.25, canopyY + 3, s * 0.32, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx + s * 0.28, canopyY + 1, s * 0.3, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx - s * 0.08, canopyY + 6, s * 0.34, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx + s * 0.05, canopyY + 4, s * 0.3, 0, Math.PI * 2); ctx.fill();
+
+      // Middle layer
+      let midShade = `rgb(${parseInt(tree.shade.slice(4)) + 12}, ${parseInt(tree.shade.split(',')[1]) + 14}, ${parseInt(tree.shade.split(',')[2]) + 8})`;
+      ctx.fillStyle = midShade;
+      ctx.beginPath(); ctx.arc(cx + s * 0.08, canopyY - 2, s * 0.38, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx - s * 0.15, canopyY - 3, s * 0.32, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx + s * 0.2, canopyY - 1, s * 0.26, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx - s * 0.3, canopyY + 2, s * 0.22, 0, Math.PI * 2); ctx.fill();
+
+      // Top layer (sunlit)
+      let topShade = `rgb(${parseInt(tree.shade.slice(4)) + 28}, ${parseInt(tree.shade.split(',')[1]) + 30}, ${parseInt(tree.shade.split(',')[2]) + 15})`;
+      ctx.fillStyle = topShade;
+      ctx.beginPath(); ctx.arc(cx - s * 0.05, canopyY - 7, s * 0.28, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx + s * 0.12, canopyY - 5, s * 0.22, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx - s * 0.18, canopyY - 5, s * 0.18, 0, Math.PI * 2); ctx.fill();
+
+      // Leaf cluster detail bumps
+      ctx.fillStyle = 'rgba(0,25,0,0.12)';
+      for (let d = 0; d < 10; d++) {
+        let dx2 = Math.sin(d * 1.4 + tx) * s * 0.3;
+        let dy2 = Math.cos(d * 1.9 + ty) * s * 0.22;
+        ctx.beginPath();
+        ctx.arc(cx + dx2, canopyY + dy2, s * 0.08 + Math.sin(d * 3) * s * 0.03, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Sun dapple / highlight spots
+      ctx.fillStyle = 'rgba(130,200,70,0.12)';
+      ctx.beginPath(); ctx.arc(cx - s * 0.08, canopyY - 10, s * 0.1, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx + s * 0.12, canopyY - 7, s * 0.07, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(180,230,100,0.08)';
+      ctx.beginPath(); ctx.arc(cx - s * 0.02, canopyY - 8, s * 0.14, 0, Math.PI * 2); ctx.fill();
+
+      // Edge leaf silhouettes for organic shape
+      ctx.fillStyle = tree.shade;
+      for (let e = 0; e < 8; e++) {
+        let ea = (e / 8) * Math.PI * 2 + tree.sway;
+        let er = s * 0.42 + Math.sin(e * 2.7 + tx) * s * 0.06;
+        ctx.beginPath();
+        ctx.arc(cx + Math.cos(ea) * er, canopyY + Math.sin(ea) * er * 0.6, s * 0.1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+    }
+  }
+
+  if (!inMainMenu) {
+  // Crash sites
+  for (const site of crashSites) {
+    if (site.rescued) {
+      // Empty crash site - just scorch marks remaining
+      ctx.fillStyle = 'rgba(40,30,10,0.4)';
+      ctx.beginPath();
+      ctx.ellipse(site.x, site.y + 5, 35, 14, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#aaa';
+      ctx.font = '10px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('rescued', site.x, site.y + 5);
+      continue;
+    }
+
+    // Smoke
+    for (const s of site.smoke) {
+      ctx.fillStyle = `rgba(100,100,100,${s.life/60 * 0.5})`;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Dirt/scorch mark under crash
+    ctx.fillStyle = '#3a2a10';
+    ctx.beginPath();
+    ctx.ellipse(site.x, site.y + 5, 45, 18, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#2a1a08';
+    ctx.beginPath();
+    ctx.ellipse(site.x + 5, site.y + 3, 30, 10, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Scattered debris pieces
+    ctx.fillStyle = '#555';
+    for (let d = 0; d < 5; d++) {
+      let dx2 = site.x + Math.sin(d * 1.8 + site.x) * 35;
+      let dy2 = site.y + Math.cos(d * 2.1 + site.y) * 20;
+      ctx.fillRect(dx2, dy2, 4 + d * 2, 3);
+    }
+
+    // Crash wreckage
+    if (site.type === 'plane') {
+      ctx.save();
+      ctx.translate(site.x, site.y);
+      ctx.rotate(0.15); // slightly tilted
+
+      // Fuselage - long cylinder shape
+      ctx.fillStyle = '#c0c0c0';
+      ctx.beginPath();
+      ctx.roundRect(-35, -8, 70, 16, 8);
+      ctx.fill();
+      ctx.strokeStyle = '#888';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(-35, -8, 70, 16, 8);
+      ctx.stroke();
+
+      // Fuselage stripe
+      ctx.fillStyle = '#2255aa';
+      ctx.fillRect(-30, -2, 55, 4);
+
+      // Cockpit windows
+      ctx.fillStyle = '#88ccff';
+      ctx.beginPath();
+      ctx.ellipse(30, -3, 6, 4, 0.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#668faa';
+      ctx.beginPath();
+      ctx.ellipse(30, -3, 6, 4, 0.2, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Passenger windows
+      ctx.fillStyle = '#88ccff';
+      for (let w = -20; w < 20; w += 8) {
+        ctx.beginPath();
+        ctx.arc(w, -5, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Wings - one bent up, one broken
+      ctx.fillStyle = '#a0a0a0';
+      // Left wing (bent/broken)
+      ctx.beginPath();
+      ctx.moveTo(-10, 0);
+      ctx.lineTo(-40, -15);
+      ctx.lineTo(-45, -12);
+      ctx.lineTo(-15, 3);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#777';
+      ctx.stroke();
+      // Broken part dangling
+      ctx.fillStyle = '#909090';
+      ctx.beginPath();
+      ctx.moveTo(-40, -15);
+      ctx.lineTo(-50, -8);
+      ctx.lineTo(-45, -5);
+      ctx.lineTo(-38, -12);
+      ctx.closePath();
+      ctx.fill();
+
+      // Right wing (crumpled on ground)
+      ctx.fillStyle = '#a0a0a0';
+      ctx.beginPath();
+      ctx.moveTo(-5, 3);
+      ctx.lineTo(10, 22);
+      ctx.lineTo(35, 18);
+      ctx.lineTo(5, 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#777';
+      ctx.stroke();
+
+      // Tail fin
+      ctx.fillStyle = '#b0b0b0';
+      ctx.beginPath();
+      ctx.moveTo(-30, -8);
+      ctx.lineTo(-38, -25);
+      ctx.lineTo(-28, -24);
+      ctx.lineTo(-25, -8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#cc2222';
+      ctx.beginPath();
+      ctx.moveTo(-35, -22);
+      ctx.lineTo(-38, -25);
+      ctx.lineTo(-30, -24);
+      ctx.closePath();
+      ctx.fill();
+
+      // Engine (fallen off, on ground)
+      ctx.fillStyle = '#666';
+      ctx.beginPath();
+      ctx.ellipse(20, 15, 8, 5, 0.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#444';
+      ctx.beginPath();
+      ctx.ellipse(23, 16, 4, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    } else {
+      // HELICOPTER
+      ctx.save();
+      ctx.translate(site.x, site.y);
+      ctx.rotate(-0.1); // slight tilt
+
+      // Body - rounded box
+      ctx.fillStyle = '#556b2f';
+      ctx.beginPath();
+      ctx.roundRect(-20, -12, 40, 26, 6);
+      ctx.fill();
+      ctx.strokeStyle = '#3a4a1f';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(-20, -12, 40, 26, 6);
+      ctx.stroke();
+
+      // Cockpit glass
+      ctx.fillStyle = '#88ccff';
+      ctx.beginPath();
+      ctx.roundRect(10, -9, 12, 14, [0, 5, 5, 0]);
+      ctx.fill();
+      ctx.strokeStyle = '#5599aa';
+      ctx.beginPath();
+      ctx.roundRect(10, -9, 12, 14, [0, 5, 5, 0]);
+      ctx.stroke();
+      // Glass crack
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(14, -7);
+      ctx.lineTo(18, -1);
+      ctx.lineTo(15, 3);
+      ctx.stroke();
+
+      // Cross marking (rescue helicopter)
+      ctx.fillStyle = '#cc2222';
+      ctx.fillRect(-5, -5, 10, 3);
+      ctx.fillRect(-2, -8, 3, 10);
+
+      // Tail boom
+      ctx.fillStyle = '#4a5f25';
+      ctx.beginPath();
+      ctx.moveTo(-20, -4);
+      ctx.lineTo(-50, -8);
+      ctx.lineTo(-50, -2);
+      ctx.lineTo(-20, 4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#3a4a1f';
+      ctx.stroke();
+
+      // Tail rotor
+      ctx.fillStyle = '#777';
+      ctx.save();
+      ctx.translate(-50, -5);
+      ctx.rotate(Date.now() / 400);
+      ctx.fillRect(-2, -10, 4, 20);
+      ctx.restore();
+
+      // Skids (landing gear) - bent
+      ctx.strokeStyle = '#555';
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = 'round';
+      // Left skid
+      ctx.beginPath();
+      ctx.moveTo(-12, 14);
+      ctx.lineTo(-15, 20);
+      ctx.lineTo(15, 22);
+      ctx.stroke();
+      // Right skid strut
+      ctx.beginPath();
+      ctx.moveTo(-10, 14);
+      ctx.lineTo(-12, 18);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(10, 14);
+      ctx.lineTo(8, 20);
+      ctx.stroke();
+
+      // Main rotor - broken, on the ground
+      ctx.strokeStyle = '#666';
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(0, -12);
+      ctx.lineTo(30, -25);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, -12);
+      ctx.lineTo(-25, -20);
+      ctx.stroke();
+      // Broken blade piece on ground
+      ctx.strokeStyle = '#555';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(25, 10);
+      ctx.lineTo(40, 5);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    // SOS indicator
+    ctx.fillStyle = '#ff4444';
+    ctx.font = 'bold 14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(`SOS`, site.x, site.y - 35);
+    ctx.fillStyle = '#ffcc00';
+    ctx.font = '11px Arial';
+    ctx.fillText(`${site.survivors} survivor${site.survivors > 1 ? 's' : ''}`, site.x, site.y - 23);
+
+    // Pulsing ring
+    let pulse = Math.sin(Date.now() / 300) * 8 + 45;
+    ctx.strokeStyle = 'rgba(255, 50, 50, 0.3)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(site.x, site.y, pulse, 0, Math.PI * 2);
+    ctx.stroke();
+    // Inner pulse
+    let pulse2 = Math.sin(Date.now() / 200) * 4 + 30;
+    ctx.strokeStyle = 'rgba(255, 150, 50, 0.2)';
+    ctx.beginPath();
+    ctx.arc(site.x, site.y, pulse2, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // Followers
+  for (let i = 0; i < followers.length; i++) {
+    const f = followers[i];
+    const target = i === 0 ? player : followers[i - 1];
+    const fDir = Math.abs(target.x - f.x) > Math.abs(target.y - f.y)
+      ? (target.x > f.x ? 'right' : 'left')
+      : (target.y > f.y ? 'down' : 'up');
+    drawBean(f.x, f.y, 16, f.color, fDir, false, f.moving);
+  }
+  } // end !inMainMenu crash/followers block
+
+  // Draw item icon helper
+  function drawItemIcon(cx, cy, type, size) {
+    let r = size;
+    if (type === 'food') {
+      // Cooked steak on bone — simple, bold, readable at any size
+
+      // Shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.2)';
+      ctx.beginPath();
+      ctx.ellipse(cx, cy + r * 0.4, r * 0.55, r * 0.12, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Bone sticking out bottom-left
+      ctx.fillStyle = '#f0e4d0';
+      ctx.strokeStyle = '#c0b498';
+      ctx.lineWidth = r * 0.04;
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.2, cy + r * 0.15);
+      ctx.lineTo(cx - r * 0.7, cy + r * 0.55);
+      ctx.lineTo(cx - r * 0.55, cy + r * 0.6);
+      ctx.lineTo(cx - r * 0.1, cy + r * 0.25);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      // Bone knob
+      ctx.fillStyle = '#f0e4d0';
+      ctx.beginPath();
+      ctx.arc(cx - r * 0.65, cy + r * 0.58, r * 0.12, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Main meat — thick oval
+      ctx.fillStyle = '#6a2818';
+      ctx.beginPath();
+      ctx.ellipse(cx + r * 0.05, cy, r * 0.55, r * 0.38, 0.15, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Seared dark edge
+      ctx.strokeStyle = '#3a1208';
+      ctx.lineWidth = r * 0.08;
+      ctx.beginPath();
+      ctx.ellipse(cx + r * 0.05, cy, r * 0.55, r * 0.38, 0.15, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Medium-rare pink inside
+      ctx.fillStyle = '#c85040';
+      ctx.beginPath();
+      ctx.ellipse(cx + r * 0.05, cy, r * 0.38, r * 0.24, 0.15, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Juicy rare center
+      ctx.fillStyle = '#dd6858';
+      ctx.beginPath();
+      ctx.ellipse(cx + r * 0.05, cy - r * 0.02, r * 0.2, r * 0.12, 0.1, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Grill marks — bold diagonal
+      ctx.strokeStyle = '#2a0a04';
+      ctx.lineWidth = r * 0.09;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.3, cy - r * 0.15);
+      ctx.lineTo(cx + r * 0.35, cy + r * 0.15);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.2, cy + r * 0.15);
+      ctx.lineTo(cx + r * 0.4, cy - r * 0.12);
+      ctx.stroke();
+
+      // Fat marbling
+      ctx.fillStyle = 'rgba(230,200,180,0.3)';
+      ctx.beginPath();
+      ctx.ellipse(cx + r * 0.15, cy - r * 0.08, r * 0.1, r * 0.04, 0.8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(cx - r * 0.1, cy + r * 0.06, r * 0.08, r * 0.03, -0.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Glisten
+      ctx.fillStyle = 'rgba(255,230,200,0.2)';
+      ctx.beginPath();
+      ctx.ellipse(cx - r * 0.1, cy - r * 0.15, r * 0.1, r * 0.06, 0.3, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (type === 'speed') {
+      // Jungle boot - tan/green adventure style
+
+      // Shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.18)';
+      ctx.beginPath();
+      ctx.ellipse(cx + r * 0.05, cy + r * 0.55, r * 0.5, r * 0.08, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Thick rubber sole - dark tan
+      ctx.fillStyle = '#3a3020';
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.35, cy + r * 0.42);
+      ctx.lineTo(cx + r * 0.55, cy + r * 0.42);
+      ctx.lineTo(cx + r * 0.6, cy + r * 0.52);
+      ctx.lineTo(cx - r * 0.4, cy + r * 0.52);
+      ctx.closePath();
+      ctx.fill();
+      // Tread
+      ctx.strokeStyle = '#4a4030';
+      ctx.lineWidth = r * 0.03;
+      for (let t = 0; t < 5; t++) {
+        ctx.beginPath();
+        ctx.moveTo(cx - r * 0.3 + t * r * 0.18, cy + r * 0.52);
+        ctx.lineTo(cx - r * 0.28 + t * r * 0.18, cy + r * 0.47);
+        ctx.stroke();
+      }
+
+      // Boot body - tan canvas upper half, green lower
+      // Green canvas lower
+      ctx.fillStyle = '#4a6a35';
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.35, cy + r * 0.42);
+      ctx.lineTo(cx - r * 0.32, cy - r * 0.05);
+      ctx.lineTo(cx + r * 0.12, cy - r * 0.05);
+      ctx.lineTo(cx + r * 0.55, cy + r * 0.42);
+      ctx.closePath();
+      ctx.fill();
+
+      // Tan leather upper shaft
+      ctx.fillStyle = '#b89a6a';
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.32, cy - r * 0.05);
+      ctx.lineTo(cx - r * 0.28, cy - r * 0.55);
+      ctx.lineTo(cx + r * 0.1, cy - r * 0.55);
+      ctx.lineTo(cx + r * 0.12, cy - r * 0.05);
+      ctx.closePath();
+      ctx.fill();
+
+      // Boot outline
+      ctx.strokeStyle = '#5a4a2a';
+      ctx.lineWidth = r * 0.04;
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.35, cy + r * 0.42);
+      ctx.lineTo(cx - r * 0.28, cy - r * 0.55);
+      ctx.lineTo(cx + r * 0.1, cy - r * 0.55);
+      ctx.lineTo(cx + r * 0.12, cy - r * 0.05);
+      ctx.lineTo(cx + r * 0.55, cy + r * 0.42);
+      ctx.stroke();
+
+      // Toe cap - reinforced rubber
+      ctx.fillStyle = '#3a5a28';
+      ctx.beginPath();
+      ctx.moveTo(cx + r * 0.12, cy - r * 0.05);
+      ctx.bezierCurveTo(cx + r * 0.35, cy - r * 0.1, cx + r * 0.58, cy + r * 0.15, cx + r * 0.55, cy + r * 0.42);
+      ctx.lineTo(cx + r * 0.2, cy + r * 0.42);
+      ctx.closePath();
+      ctx.fill();
+
+      // Tongue
+      ctx.fillStyle = '#c8a878';
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.1, cy - r * 0.05);
+      ctx.lineTo(cx - r * 0.06, cy - r * 0.5);
+      ctx.lineTo(cx + r * 0.06, cy - r * 0.5);
+      ctx.lineTo(cx + r * 0.08, cy - r * 0.05);
+      ctx.closePath();
+      ctx.fill();
+
+      // Lace eyelets
+      ctx.fillStyle = '#888';
+      for (let e = 0; e < 5; e++) {
+        let ey = cy - r * 0.45 + e * r * 0.1;
+        ctx.beginPath(); ctx.arc(cx - r * 0.14, ey, r * 0.02, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx + r * 0.06, ey, r * 0.02, 0, Math.PI * 2); ctx.fill();
+      }
+
+      // Laces - tan
+      ctx.strokeStyle = '#8a7a5a';
+      ctx.lineWidth = r * 0.025;
+      ctx.lineCap = 'round';
+      for (let l = 0; l < 4; l++) {
+        let ly = cy - r * 0.45 + l * r * 0.1;
+        ctx.beginPath();
+        ctx.moveTo(cx - r * 0.14, ly);
+        ctx.lineTo(cx + r * 0.06, ly + r * 0.1);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(cx + r * 0.06, ly);
+        ctx.lineTo(cx - r * 0.14, ly + r * 0.1);
+        ctx.stroke();
+      }
+
+      // Top collar
+      ctx.fillStyle = '#c0a070';
+      ctx.beginPath();
+      ctx.ellipse(cx - r * 0.09, cy - r * 0.55, r * 0.2, r * 0.05, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Stitching where colors meet
+      ctx.strokeStyle = '#7a6a4a';
+      ctx.lineWidth = r * 0.02;
+      ctx.setLineDash([r * 0.03, r * 0.03]);
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.32, cy - r * 0.05);
+      ctx.lineTo(cx + r * 0.12, cy - r * 0.05);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Heel tab
+      ctx.fillStyle = '#a08050';
+      ctx.fillRect(cx - r * 0.35, cy - r * 0.15, r * 0.08, r * 0.2);
+
+      // Speed lines - green glow
+      ctx.strokeStyle = 'rgba(68,204,68,0.35)';
+      ctx.lineWidth = r * 0.05;
+      ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(cx - r * 0.55, cy - r * 0.1); ctx.lineTo(cx - r * 0.8, cy - r * 0.1); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx - r * 0.5, cy + r * 0.1); ctx.lineTo(cx - r * 0.75, cy + r * 0.1); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx - r * 0.5, cy + r * 0.3); ctx.lineTo(cx - r * 0.7, cy + r * 0.3); ctx.stroke();
+
+    } else if (type === 'shield') {
+      // Wooden shield with metal trim
+
+      // Shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.15)';
+      ctx.beginPath();
+      ctx.ellipse(cx, cy + r * 0.6, r * 0.4, r * 0.08, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Shield shape - pointed bottom, rounded top
+      ctx.fillStyle = '#6a4a25';
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - r * 0.7);
+      ctx.bezierCurveTo(cx - r * 0.6, cy - r * 0.7, cx - r * 0.7, cy - r * 0.3, cx - r * 0.6, cy + r * 0.1);
+      ctx.bezierCurveTo(cx - r * 0.45, cy + r * 0.45, cx - r * 0.15, cy + r * 0.65, cx, cy + r * 0.75);
+      ctx.bezierCurveTo(cx + r * 0.15, cy + r * 0.65, cx + r * 0.45, cy + r * 0.45, cx + r * 0.6, cy + r * 0.1);
+      ctx.bezierCurveTo(cx + r * 0.7, cy - r * 0.3, cx + r * 0.6, cy - r * 0.7, cx, cy - r * 0.7);
+      ctx.closePath();
+      ctx.fill();
+
+      // Wood plank lines
+      ctx.strokeStyle = '#5a3a18';
+      ctx.lineWidth = r * 0.02;
+      ctx.beginPath(); ctx.moveTo(cx - r * 0.2, cy - r * 0.65); ctx.lineTo(cx - r * 0.25, cy + r * 0.55); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx + r * 0.2, cy - r * 0.65); ctx.lineTo(cx + r * 0.15, cy + r * 0.55); ctx.stroke();
+
+      // Wood grain
+      ctx.strokeStyle = 'rgba(80,50,20,0.15)';
+      ctx.lineWidth = r * 0.015;
+      for (let g = -2; g <= 2; g++) {
+        ctx.beginPath();
+        ctx.moveTo(cx + g * r * 0.12, cy - r * 0.5);
+        ctx.bezierCurveTo(cx + g * r * 0.12 + r * 0.02, cy - r * 0.2, cx + g * r * 0.12 - r * 0.02, cy + r * 0.1, cx + g * r * 0.12, cy + r * 0.4);
+        ctx.stroke();
+      }
+
+      // Metal rim
+      ctx.strokeStyle = '#888';
+      ctx.lineWidth = r * 0.06;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - r * 0.7);
+      ctx.bezierCurveTo(cx - r * 0.6, cy - r * 0.7, cx - r * 0.7, cy - r * 0.3, cx - r * 0.6, cy + r * 0.1);
+      ctx.bezierCurveTo(cx - r * 0.45, cy + r * 0.45, cx - r * 0.15, cy + r * 0.65, cx, cy + r * 0.75);
+      ctx.bezierCurveTo(cx + r * 0.15, cy + r * 0.65, cx + r * 0.45, cy + r * 0.45, cx + r * 0.6, cy + r * 0.1);
+      ctx.bezierCurveTo(cx + r * 0.7, cy - r * 0.3, cx + r * 0.6, cy - r * 0.7, cx, cy - r * 0.7);
+      ctx.closePath();
+      ctx.stroke();
+
+      // Metal boss (center circle)
+      ctx.fillStyle = '#999';
+      ctx.beginPath();
+      ctx.arc(cx, cy - r * 0.05, r * 0.18, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#777';
+      ctx.lineWidth = r * 0.03;
+      ctx.stroke();
+      // Boss inner ring
+      ctx.strokeStyle = '#aaa';
+      ctx.lineWidth = r * 0.02;
+      ctx.beginPath();
+      ctx.arc(cx, cy - r * 0.05, r * 0.1, 0, Math.PI * 2);
+      ctx.stroke();
+      // Boss dome highlight
+      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      ctx.beginPath();
+      ctx.arc(cx - r * 0.04, cy - r * 0.1, r * 0.06, 0, Math.PI * 2);
+      ctx.fill();
+      // Boss rivet
+      ctx.fillStyle = '#bbb';
+      ctx.beginPath();
+      ctx.arc(cx, cy - r * 0.05, r * 0.04, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Corner rivets
+      ctx.fillStyle = '#aaa';
+      let rivets = [
+        [cx, cy - r * 0.55],
+        [cx - r * 0.45, cy - r * 0.2],
+        [cx + r * 0.45, cy - r * 0.2],
+        [cx - r * 0.3, cy + r * 0.3],
+        [cx + r * 0.3, cy + r * 0.3],
+        [cx, cy + r * 0.55]
+      ];
+      for (let rv of rivets) {
+        ctx.beginPath();
+        ctx.arc(rv[0], rv[1], r * 0.035, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Metal cross bars
+      ctx.strokeStyle = '#888';
+      ctx.lineWidth = r * 0.04;
+      ctx.lineCap = 'round';
+      // Horizontal
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.45, cy - r * 0.05);
+      ctx.lineTo(cx + r * 0.45, cy - r * 0.05);
+      ctx.stroke();
+      // Vertical
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - r * 0.55);
+      ctx.lineTo(cx, cy + r * 0.55);
+      ctx.stroke();
+
+      // Shine on wood
+      ctx.fillStyle = 'rgba(255,220,150,0.08)';
+      ctx.beginPath();
+      ctx.ellipse(cx - r * 0.15, cy - r * 0.3, r * 0.15, r * 0.25, 0.15, 0, Math.PI * 2);
+      ctx.fill();
+
+    } else if (type === 'medkit') {
+      // Medical kit box
+      // Box body
+      ctx.fillStyle = '#eee';
+      ctx.beginPath();
+      ctx.roundRect(cx - r * 0.65, cy - r * 0.5, r * 1.3, r * 1, r * 0.12);
+      ctx.fill();
+      // Box shadow/depth
+      ctx.fillStyle = '#ccc';
+      ctx.fillRect(cx - r * 0.65, cy + r * 0.3, r * 1.3, r * 0.2);
+      // Box outline
+      ctx.strokeStyle = '#999';
+      ctx.lineWidth = r * 0.06;
+      ctx.beginPath();
+      ctx.roundRect(cx - r * 0.65, cy - r * 0.5, r * 1.3, r * 1, r * 0.12);
+      ctx.stroke();
+      // Latch
+      ctx.fillStyle = '#aaa';
+      ctx.fillRect(cx - r * 0.08, cy + r * 0.3, r * 0.16, r * 0.12);
+      // Hinge line
+      ctx.strokeStyle = '#bbb';
+      ctx.lineWidth = r * 0.04;
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.5, cy - r * 0.15);
+      ctx.lineTo(cx + r * 0.5, cy - r * 0.15);
+      ctx.stroke();
+      // Red cross
+      ctx.fillStyle = '#cc2222';
+      ctx.fillRect(cx - r * 0.3, cy - r * 0.1, r * 0.6, r * 0.22);
+      ctx.fillRect(cx - r * 0.1, cy - r * 0.35, r * 0.22, r * 0.6);
+      // Cross highlight
+      ctx.fillStyle = 'rgba(255,255,255,0.2)';
+      ctx.fillRect(cx - r * 0.25, cy - r * 0.07, r * 0.5, r * 0.08);
+      // Handle on top
+      ctx.strokeStyle = '#888';
+      ctx.lineWidth = r * 0.08;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.2, cy - r * 0.5);
+      ctx.quadraticCurveTo(cx, cy - r * 0.7, cx + r * 0.2, cy - r * 0.5);
+      ctx.stroke();
+    } else {
+      // Default: colored circle with letter
+      let it = ITEM_TYPES[type];
+      ctx.fillStyle = it.color;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * 0.7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = `bold ${r * 0.8}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.fillText(it.icon, cx, cy + r * 0.3);
+    }
+  }
+
+  // World items
+  if (inMainMenu) { /* skip items */ } else
+  for (const item of worldItems) {
+    if (item.collected) continue;
+    let it = ITEM_TYPES[item.type];
+    let bob = Math.sin(Date.now() / 400 + item.x) * 3;
+    // Glow
+    ctx.fillStyle = `${it.color}33`;
+    ctx.beginPath();
+    ctx.arc(item.x, item.y + bob, 14, 0, Math.PI * 2);
+    ctx.fill();
+    // Draw item
+    drawItemIcon(item.x, item.y + bob, item.type, 12);
+  }
+
+  // Wolves
+  for (const wolf of wolves) {
+    // Detection range circle
+    if (!inMainMenu) {
+    let distToPlayer = Math.hypot(player.x - wolf.x, player.y - wolf.y);
+    if (wolf.state === 'chase') {
+      ctx.strokeStyle = 'rgba(255, 50, 50, 0.25)';
+      ctx.fillStyle = 'rgba(255, 50, 50, 0.05)';
+    } else {
+      ctx.strokeStyle = 'rgba(255, 200, 50, 0.15)';
+      ctx.fillStyle = 'rgba(255, 200, 50, 0.03)';
+    }
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    ctx.arc(wolf.x, wolf.y, WOLF_DETECT, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fill();
+    ctx.setLineDash([]);
+    } // end !inMainMenu detection circle
+
+    let s = wolf.isAlpha ? 28 : 22;
+    ctx.save();
+    ctx.translate(wolf.x, wolf.y);
+    let flip = wolf.facing === 'left' ? -1 : 1;
+    ctx.scale(flip, 1);
+
+    let isChasing = wolf.state === 'chase';
+    let isAttacking = wolf.attackTimer > 0;
+    let t = inMainMenu ? 0 : Date.now();
+
+    // Fur colors
+    let furDark, furMain, furLight, furBelly;
+    if (wolf.isAlpha) {
+      furDark = '#2a2a2a'; furMain = '#3a3a3a'; furLight = '#5a5a5a'; furBelly = '#706860';
+    } else {
+      furDark = '#4a4a4a'; furMain = '#6a6a6a'; furLight = '#8a8a8a'; furBelly = '#a09890';
+    }
+    if (isAttacking) { furDark = '#5a2a2a'; furMain = '#7a3a3a'; }
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    ctx.beginPath();
+    ctx.ellipse(0, s * 0.38, s * 0.5, s * 0.08, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Leg animation
+    let legSpeed = isChasing ? 80 : 200;
+    let legAmp = isChasing ? 6 : 3;
+    let ls = Math.sin(t / legSpeed + wolf.x) * legAmp;
+
+    // --- BACK LEGS (behind body) ---
+    ctx.lineWidth = 3.5;
+    ctx.lineCap = 'round';
+    // Back-left leg: upper + lower
+    ctx.strokeStyle = furDark;
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.2, s * 0.08);
+    ctx.lineTo(-s * 0.25 + ls * 0.5, s * 0.22);
+    ctx.lineTo(-s * 0.22 + ls, s * 0.35);
+    ctx.stroke();
+    // Paw
+    ctx.fillStyle = furDark;
+    ctx.beginPath();
+    ctx.ellipse(-s * 0.22 + ls, s * 0.36, 3, 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Back-right leg
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.12, s * 0.08);
+    ctx.lineTo(-s * 0.15 - ls * 0.5, s * 0.22);
+    ctx.lineTo(-s * 0.13 - ls, s * 0.35);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(-s * 0.13 - ls, s * 0.36, 3, 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // --- FRONT LEGS ---
+    // Front-left leg
+    ctx.strokeStyle = furMain;
+    ctx.beginPath();
+    ctx.moveTo(s * 0.18, s * 0.08);
+    ctx.lineTo(s * 0.2 - ls * 0.5, s * 0.22);
+    ctx.lineTo(s * 0.18 - ls, s * 0.35);
+    ctx.stroke();
+    ctx.fillStyle = furMain;
+    ctx.beginPath();
+    ctx.ellipse(s * 0.18 - ls, s * 0.36, 3, 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Front-right leg
+    ctx.beginPath();
+    ctx.moveTo(s * 0.25, s * 0.08);
+    ctx.lineTo(s * 0.28 + ls * 0.5, s * 0.22);
+    ctx.lineTo(s * 0.26 + ls, s * 0.35);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(s * 0.26 + ls, s * 0.36, 3, 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // --- BODY ---
+    // Main body shape
+    ctx.fillStyle = furMain;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, s * 0.4, s * 0.16, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Back hump / shoulder
+    ctx.fillStyle = furDark;
+    ctx.beginPath();
+    ctx.ellipse(s * 0.1, -s * 0.06, s * 0.18, s * 0.1, -0.2, 0, Math.PI * 2);
+    ctx.fill();
+    // Belly (lighter)
+    ctx.fillStyle = furBelly;
+    ctx.beginPath();
+    ctx.ellipse(s * 0.02, s * 0.06, s * 0.25, s * 0.07, 0, 0, Math.PI);
+    ctx.fill();
+    // Fur texture lines on body
+    ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+    ctx.lineWidth = 0.5;
+    for (let f = -3; f <= 3; f++) {
+      ctx.beginPath();
+      ctx.moveTo(f * s * 0.08, -s * 0.08);
+      ctx.lineTo(f * s * 0.08 - 1, s * 0.05);
+      ctx.stroke();
+    }
+
+    // --- TAIL --- bushy with fur detail
+    ctx.lineWidth = 1;
+    let tailWag = Math.sin(t / (isChasing ? 120 : 300) + wolf.y) * (isChasing ? 5 : 3);
+    let tailTipX = -s * 0.55;
+    let tailTipY = -s * 0.18 + tailWag;
+    let tailMidX = -s * 0.42;
+    let tailMidY = -s * 0.22 + tailWag * 0.6;
+    // Bushy tail shape
+    ctx.fillStyle = furMain;
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.3, 0);
+    ctx.quadraticCurveTo(tailMidX - 3, tailMidY + 5, tailTipX, tailTipY + 3);
+    ctx.quadraticCurveTo(tailTipX - 3, tailTipY - 3, tailTipX + 2, tailTipY - 4);
+    ctx.quadraticCurveTo(tailMidX + 2, tailMidY - 3, -s * 0.3, -s * 0.06);
+    ctx.closePath();
+    ctx.fill();
+    // Tail tip lighter
+    ctx.fillStyle = furLight;
+    ctx.beginPath();
+    ctx.ellipse(tailTipX, tailTipY, 4, 3, tailWag * 0.05, 0, Math.PI * 2);
+    ctx.fill();
+
+    // --- NECK ---
+    ctx.fillStyle = furMain;
+    ctx.beginPath();
+    ctx.moveTo(s * 0.22, -s * 0.1);
+    ctx.lineTo(s * 0.32, -s * 0.18);
+    ctx.lineTo(s * 0.35, -s * 0.05);
+    ctx.lineTo(s * 0.25, s * 0.02);
+    ctx.closePath();
+    ctx.fill();
+    // Neck ruff / mane
+    ctx.fillStyle = furLight;
+    ctx.beginPath();
+    ctx.ellipse(s * 0.24, -s * 0.04, s * 0.08, s * 0.1, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // --- HEAD ---
+    let headDip = isChasing ? s * 0.03 : 0; // head lower when chasing
+    ctx.fillStyle = furMain;
+    ctx.beginPath();
+    ctx.ellipse(s * 0.38, -s * 0.14 + headDip, s * 0.14, s * 0.12, -0.15, 0, Math.PI * 2);
+    ctx.fill();
+    // Forehead darker stripe
+    ctx.fillStyle = furDark;
+    ctx.beginPath();
+    ctx.ellipse(s * 0.36, -s * 0.2 + headDip, s * 0.08, s * 0.05, -0.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // --- SNOUT ---
+    ctx.fillStyle = furLight;
+    ctx.beginPath();
+    ctx.ellipse(s * 0.5, -s * 0.08 + headDip, s * 0.09, s * 0.06, -0.1, 0, Math.PI * 2);
+    ctx.fill();
+    // Nose
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath();
+    ctx.ellipse(s * 0.57, -s * 0.08 + headDip, 2.5, 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Nostril detail
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.arc(s * 0.565, -s * 0.075 + headDip, 0.8, 0, Math.PI * 2);
+    ctx.fill();
+
+    // --- MOUTH ---
+    if (isChasing || isAttacking) {
+      // Open jaw
+      ctx.fillStyle = '#3a1010';
+      ctx.beginPath();
+      ctx.moveTo(s * 0.46, -s * 0.04 + headDip);
+      ctx.lineTo(s * 0.56, -s * 0.02 + headDip);
+      ctx.lineTo(s * 0.54, s * 0.05 + headDip);
+      ctx.lineTo(s * 0.44, s * 0.03 + headDip);
+      ctx.closePath();
+      ctx.fill();
+      // Tongue
+      ctx.fillStyle = '#cc5555';
+      ctx.beginPath();
+      ctx.ellipse(s * 0.5, s * 0.02 + headDip, 3, 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Teeth
+      ctx.fillStyle = '#eee';
+      ctx.beginPath();
+      ctx.moveTo(s * 0.47, -s * 0.035 + headDip);
+      ctx.lineTo(s * 0.48, -s * 0.01 + headDip);
+      ctx.lineTo(s * 0.49, -s * 0.035 + headDip);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(s * 0.52, -s * 0.03 + headDip);
+      ctx.lineTo(s * 0.53, -s * 0.005 + headDip);
+      ctx.lineTo(s * 0.54, -s * 0.03 + headDip);
+      ctx.fill();
+    } else {
+      // Closed mouth line
+      ctx.strokeStyle = '#444';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(s * 0.48, -s * 0.05 + headDip);
+      ctx.lineTo(s * 0.55, -s * 0.06 + headDip);
+      ctx.stroke();
+    }
+
+    // --- EYES ---
+    // Eye socket
+    ctx.fillStyle = furDark;
+    ctx.beginPath();
+    ctx.ellipse(s * 0.4, -s * 0.17 + headDip, s * 0.045, s * 0.04, -0.1, 0, Math.PI * 2);
+    ctx.fill();
+    // Eye white
+    ctx.fillStyle = isChasing ? '#ffdddd' : '#ffe';
+    ctx.beginPath();
+    ctx.ellipse(s * 0.4, -s * 0.17 + headDip, s * 0.035, s * 0.03, -0.1, 0, Math.PI * 2);
+    ctx.fill();
+    // Iris
+    ctx.fillStyle = isChasing ? '#cc2200' : '#bb8800';
+    ctx.beginPath();
+    ctx.arc(s * 0.41, -s * 0.17 + headDip, s * 0.02, 0, Math.PI * 2);
+    ctx.fill();
+    // Pupil
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.ellipse(s * 0.415, -s * 0.17 + headDip, s * 0.01, s * 0.015, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Eye shine
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.beginPath();
+    ctx.arc(s * 0.395, -s * 0.18 + headDip, 1, 0, Math.PI * 2);
+    ctx.fill();
+
+    // --- EARS --- pointed, with inner detail
+    // Left ear (back)
+    ctx.fillStyle = furDark;
+    ctx.beginPath();
+    ctx.moveTo(s * 0.28, -s * 0.2 + headDip);
+    ctx.lineTo(s * 0.3, -s * 0.38 + headDip);
+    ctx.lineTo(s * 0.36, -s * 0.22 + headDip);
+    ctx.closePath();
+    ctx.fill();
+    // Inner ear
+    ctx.fillStyle = '#9a7a6a';
+    ctx.beginPath();
+    ctx.moveTo(s * 0.3, -s * 0.22 + headDip);
+    ctx.lineTo(s * 0.31, -s * 0.33 + headDip);
+    ctx.lineTo(s * 0.35, -s * 0.23 + headDip);
+    ctx.closePath();
+    ctx.fill();
+    // Right ear (front)
+    ctx.fillStyle = furMain;
+    ctx.beginPath();
+    ctx.moveTo(s * 0.36, -s * 0.2 + headDip);
+    ctx.lineTo(s * 0.4, -s * 0.36 + headDip);
+    ctx.lineTo(s * 0.44, -s * 0.2 + headDip);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#a08070';
+    ctx.beginPath();
+    ctx.moveTo(s * 0.38, -s * 0.22 + headDip);
+    ctx.lineTo(s * 0.4, -s * 0.32 + headDip);
+    ctx.lineTo(s * 0.43, -s * 0.22 + headDip);
+    ctx.closePath();
+    ctx.fill();
+
+    // Whisker dots on snout
+    ctx.fillStyle = '#555';
+    for (let w = 0; w < 3; w++) {
+      ctx.beginPath();
+      ctx.arc(s * 0.52, -s * 0.1 + headDip + w * 2, 0.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+
+    // Wolf health bar (only show if damaged)
+    if (!inMainMenu && wolf.health < wolf.maxHealth) {
+      let hbW = 24, hbH = 4;
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(wolf.x - hbW/2 - 1, wolf.y - 22, hbW + 2, hbH + 2);
+      ctx.fillStyle = '#333';
+      ctx.fillRect(wolf.x - hbW/2, wolf.y - 21, hbW, hbH);
+      let pct = wolf.health / wolf.maxHealth;
+      ctx.fillStyle = pct > 0.5 ? '#cc3333' : '#aa1111';
+      ctx.fillRect(wolf.x - hbW/2, wolf.y - 21, hbW * pct, hbH);
+    }
+  }
+
+  if (!inMainMenu) {
+  // Player
+  let playerMoving = keys['ArrowLeft'] || keys['a'] || keys['A'] || keys['ArrowRight'] || keys['d'] || keys['D'] || keys['ArrowUp'] || keys['w'] || keys['W'] || keys['ArrowDown'] || keys['s'] || keys['S'];
+  // Flash when hurt
+  if (player.hurtTimer > 0 && Math.floor(player.hurtTimer / 4) % 2 === 0) {
+    ctx.globalAlpha = 0.4;
+  }
+  drawBean(player.x, player.y, 24, player.color, player.facing, true, playerMoving);
+  ctx.globalAlpha = 1;
+
+  // Draw whip attack (starts from player's hand)
+  if (whip.active) {
+    let progress = 1 - (whip.timer / 20);
+    // Hand position based on facing direction
+    let handX = player.x, handY = player.y;
+    if (player.facing === 'right') { handX += 10; handY += 2; }
+    else if (player.facing === 'left') { handX -= 10; handY += 2; }
+    else if (player.facing === 'up') { handX += 6; handY -= 8; }
+    else if (player.facing === 'down') { handX -= 6; handY += 8; }
+
+    let curEndX = handX + (whip.endX - whip.x) * Math.min(progress * 2, 1);
+    let curEndY = handY + (whip.endY - whip.y) * Math.min(progress * 2, 1);
+
+    // Whip line with wave
+    ctx.strokeStyle = '#3a2008';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    let wave = Math.sin(progress * Math.PI * 3) * (1 - progress) * 10;
+    let dx = curEndX - handX;
+    let dy = curEndY - handY;
+    let len = Math.hypot(dx, dy) || 1;
+    let perpX = -dy / len * wave;
+    let perpY = dx / len * wave;
+
+    // Draw multi-segment whip for a curvy look
+    let mid1X = handX + dx * 0.33 + perpX * 0.7;
+    let mid1Y = handY + dy * 0.33 + perpY * 0.7;
+    let mid2X = handX + dx * 0.66 - perpX * 0.5;
+    let mid2Y = handY + dy * 0.66 - perpY * 0.5;
+
+    ctx.beginPath();
+    ctx.moveTo(handX, handY);
+    ctx.bezierCurveTo(mid1X, mid1Y, mid2X, mid2Y, curEndX, curEndY);
+    ctx.stroke();
+
+    // Thinner end
+    ctx.strokeStyle = '#2a1808';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(mid2X, mid2Y);
+    ctx.lineTo(curEndX, curEndY);
+    ctx.stroke();
+
+    // Whip crack at tip
+    if (progress > 0.3 && progress < 0.7) {
+      ctx.fillStyle = 'rgba(255,220,150,0.6)';
+      ctx.beginPath();
+      ctx.arc(curEndX, curEndY, 5 * (1 - Math.abs(progress - 0.5) * 4), 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  } // end !inMainMenu player block
+
+  ctx.restore();
+
+  // Skip all HUD when rendering as menu background
+  if (inMainMenu) return;
+
+  // Minimap
+  let mmW = 140, mmH = 140;
+  let mmX = canvas.width - mmW - 10, mmY = canvas.height - mmH - 30;
+  ctx.fillStyle = 'rgba(0,30,0,0.7)';
+  ctx.fillRect(mmX, mmY, mmW, mmH);
+  ctx.strokeStyle = '#4a4';
+  ctx.strokeRect(mmX, mmY, mmW, mmH);
+
+  // Rivers on minimap
+  ctx.strokeStyle = '#1a6aaa';
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  for (const river of rivers) {
+    ctx.beginPath();
+    ctx.moveTo(mmX + (river[0].x / WORLD_W) * mmW, mmY + (river[0].y / WORLD_H) * mmH);
+    for (let i = 1; i < river.length; i++) {
+      ctx.lineTo(mmX + (river[i].x / WORLD_W) * mmW, mmY + (river[i].y / WORLD_H) * mmH);
+    }
+    ctx.stroke();
+  }
+
+  // Bridges on minimap
+  ctx.fillStyle = '#9a7a4a';
+  for (const br of bridges) {
+    ctx.fillRect(mmX + (br.x / WORLD_W) * mmW - 2, mmY + (br.y / WORLD_H) * mmH - 2, 5, 5);
+  }
+
+  // Village on minimap
+  ctx.fillStyle = 'rgba(80,180,60,0.5)';
+  ctx.fillRect(
+    mmX + (village.x / WORLD_W) * mmW,
+    mmY + (village.y / WORLD_H) * mmH,
+    (village.w / WORLD_W) * mmW,
+    (village.h / WORLD_H) * mmH
+  );
+
+  // Crash sites on minimap (only unrescued visible if scout assigned)
+  for (const site of crashSites) {
+    if (site.rescued) {
+      ctx.fillStyle = '#555';
+      ctx.fillRect(mmX + (site.x / WORLD_W) * mmW - 2, mmY + (site.y / WORLD_H) * mmH - 2, 4, 4);
+    } else if (watchtowerJobs.scout.assigned > 0) {
+      // Scout reveals with blinking SOS
+      ctx.fillStyle = Math.sin(Date.now() / 300) > 0 ? '#ff4' : '#f44';
+      ctx.fillRect(mmX + (site.x / WORLD_W) * mmW - 3, mmY + (site.y / WORLD_H) * mmH - 3, 6, 6);
+    }
+  }
+
+  // Wolves on minimap (if lookout assigned)
+  if (watchtowerJobs.lookout.assigned > 0) {
+    for (const wolf of wolves) {
+      ctx.fillStyle = wolf.state === 'chase' ? '#ff4444' : '#ffdd44';
+      ctx.beginPath();
+      ctx.arc(mmX + (wolf.x / WORLD_W) * mmW, mmY + (wolf.y / WORLD_H) * mmH, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Player on minimap
+  ctx.fillStyle = '#ff0';
+  ctx.fillRect(mmX + (player.x / WORLD_W) * mmW - 3, mmY + (player.y / WORLD_H) * mmH - 3, 6, 6);
+
+  // Notification
+  if (notifyTimer > 0) {
+    ctx.fillStyle = `rgba(0,0,0,${Math.min(notifyTimer/30, 0.7)})`;
+    ctx.fillRect(canvas.width/2 - 200, 40, 400, 36);
+    ctx.fillStyle = `rgba(255,255,100,${Math.min(notifyTimer/30, 1)})`;
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(notification, canvas.width/2, 64);
+  }
+
+  // Health bar
+  let hbX = 10, hbY = 10, hbW = 120, hbH = 16;
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillRect(hbX - 2, hbY - 2, hbW + 4, hbH + 4);
+  ctx.fillStyle = '#333';
+  ctx.fillRect(hbX, hbY, hbW, hbH);
+  let healthPct = player.health / player.maxHealth;
+  let hColor = healthPct > 0.5 ? '#44cc44' : healthPct > 0.25 ? '#ccaa22' : '#cc3333';
+  ctx.fillStyle = hColor;
+  ctx.fillRect(hbX, hbY, hbW * healthPct, hbH);
+  ctx.strokeStyle = '#888';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(hbX, hbY, hbW, hbH);
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 11px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText(`HP ${player.health}/${player.maxHealth}`, hbX + hbW / 2, hbY + 12);
+
+  // Hotbar
+  let hbSlotW = 44;
+  let hbSlotH = 44;
+  let hbPad = 4;
+  let hbTotalW = (hbSlotW + hbPad) * 5 - hbPad;
+  let hbStartX = canvas.width / 2 - hbTotalW / 2;
+  let hbStartY = canvas.height - 60;
+
+  // Hotbar background
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.beginPath();
+  ctx.roundRect(hbStartX - 6, hbStartY - 6, hbTotalW + 12, hbSlotH + 22, 6);
+  ctx.fill();
+
+  for (let i = 0; i < 5; i++) {
+    let sx = hbStartX + i * (hbSlotW + hbPad);
+    let sy = hbStartY;
+    // Slot background
+    ctx.fillStyle = i === inventory.selected ? 'rgba(255,220,50,0.3)' : 'rgba(50,50,50,0.7)';
+    ctx.beginPath();
+    ctx.roundRect(sx, sy, hbSlotW, hbSlotH, 4);
+    ctx.fill();
+    // Slot border
+    ctx.strokeStyle = i === inventory.selected ? '#ffdd44' : '#666';
+    ctx.lineWidth = i === inventory.selected ? 2.5 : 1;
+    ctx.beginPath();
+    ctx.roundRect(sx, sy, hbSlotW, hbSlotH, 4);
+    ctx.stroke();
+    // Key number
+    ctx.fillStyle = '#aaa';
+    ctx.font = '10px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText(String(i + 1), sx + 3, sy + 11);
+    // Item in slot
+    let slotItem = inventory.slots[i];
+    if (slotItem) {
+      let it = ITEM_TYPES[slotItem];
+      drawItemIcon(sx + hbSlotW / 2, sy + hbSlotH / 2, slotItem, 18);
+    }
+  }
+
+  // Selected item name and controls
+  let selItem = inventory.slots[inventory.selected];
+  ctx.textAlign = 'center';
+  if (selItem) {
+    let it = ITEM_TYPES[selItem];
+    ctx.fillStyle = '#fff';
+    ctx.font = '11px Arial';
+    ctx.fillText(`${it.name} - ${it.desc} [E to use]`, canvas.width / 2, hbStartY + hbSlotH + 14);
+  } else {
+    ctx.fillStyle = '#777';
+    ctx.font = '11px Arial';
+    ctx.fillText('Empty slot [1-5 to select]', canvas.width / 2, hbStartY + hbSlotH + 14);
+  }
+
+  // Shield indicator
+  if (shieldActive) {
+    ctx.fillStyle = 'rgba(68,136,204,0.3)';
+    ctx.beginPath();
+    ctx.arc(canvas.width / 2, canvas.height / 2, 30, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#4488cc';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  // Speed boost indicator
+  if (speedBoostTimer > 0) {
+    ctx.fillStyle = '#44cc44';
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText(`Speed: ${Math.ceil(speedBoostTimer / 60)}s`, 140, 22);
+  }
+
+  // Quest tracker button + panel
+  let visibleQuests = activeQuests.filter(q => !q.turned_in);
+  {
+    let qx = 6, qy = 34;
+    let btnW = 90, btnH = 22;
+
+    // Button background - classic embossed style
+    let btnGrad = ctx.createLinearGradient(qx, qy, qx, qy + btnH);
+    btnGrad.addColorStop(0, '#6a5a3a');
+    btnGrad.addColorStop(0.5, '#4a3a20');
+    btnGrad.addColorStop(0.51, '#3a2a14');
+    btnGrad.addColorStop(1, '#4a3a20');
+    ctx.fillStyle = btnGrad;
+    ctx.beginPath();
+    ctx.roundRect(qx, qy, btnW, btnH, 3);
+    ctx.fill();
+    // Border
+    ctx.strokeStyle = '#8a7a50';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    // Inner highlight
+    ctx.strokeStyle = 'rgba(255,255,200,0.12)';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.roundRect(qx + 1, qy + 1, btnW - 2, btnH - 2, 2);
+    ctx.stroke();
+
+    // Arrow + "QUESTS" text
+    ctx.fillStyle = '#f0e8d0';
+    ctx.font = 'bold 11px Arial';
+    ctx.textAlign = 'left';
+    let arrow = questTrackerOpen ? '\u25BC' : '\u25B6';
+    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+    ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 1; ctx.shadowBlur = 2;
+    ctx.fillText(`${arrow} QUESTS`, qx + 7, qy + 15);
+    ctx.shadowColor = 'transparent';
+
+    // Count on the right side
+    ctx.fillStyle = '#ffdd44';
+    ctx.font = 'bold 11px Arial';
+    ctx.textAlign = 'right';
+    ctx.fillText(visibleQuests.length, qx + btnW - 8, qy + 15);
+
+    // Expanded quest list
+    if (questTrackerOpen) {
+      let panelX = qx;
+      let panelY = qy + btnH + 3;
+      let panelW = 185;
+      let panelH = visibleQuests.length > 0 ? 10 + visibleQuests.length * 34 : 28;
+
+      // Panel background - matching classic style
+      let panelGrad = ctx.createLinearGradient(panelX, panelY, panelX, panelY + panelH);
+      panelGrad.addColorStop(0, 'rgba(50,40,24,0.9)');
+      panelGrad.addColorStop(1, 'rgba(35,28,16,0.9)');
+      ctx.fillStyle = panelGrad;
+      ctx.beginPath();
+      ctx.roundRect(panelX, panelY, panelW, panelH, 3);
+      ctx.fill();
+      ctx.strokeStyle = '#8a7a50';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      // Inner highlight
+      ctx.strokeStyle = 'rgba(255,255,200,0.08)';
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.roundRect(panelX + 1, panelY + 1, panelW - 2, panelH - 2, 2);
+      ctx.stroke();
+
+      if (visibleQuests.length === 0) {
+        ctx.fillStyle = '#888';
+        ctx.font = '10px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('No active quests', panelX + panelW / 2, panelY + 18);
+      } else {
+        for (let i = 0; i < visibleQuests.length; i++) {
+          let q = visibleQuests[i];
+          let rowY = panelY + 14 + i * 34;
+          // Bullet/check
+          ctx.fillStyle = q.done ? '#44ff44' : '#f0e8d0';
+          ctx.font = '10px Arial';
+          ctx.textAlign = 'left';
+          ctx.fillText(q.done ? '\u2713' : '\u2022', panelX + 6, rowY);
+          // Description
+          ctx.fillText(q.desc, panelX + 18, rowY);
+          // Progress on right
+          ctx.fillStyle = q.done ? '#44ff44' : '#ffdd44';
+          ctx.font = 'bold 10px Arial';
+          ctx.textAlign = 'right';
+          ctx.fillText(`${q.progress}/${q.need}`, panelX + panelW - 6, rowY);
+          // Reward line
+          ctx.fillStyle = '#aa9a60';
+          ctx.font = '9px Arial';
+          ctx.textAlign = 'left';
+          ctx.fillText(`Reward: ${ITEM_TYPES[q.reward].name}`, panelX + 18, rowY + 13);
+        }
+      }
+    }
+  }
+
+  // Carrying indicator
+  if (followers.length > 0) {
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(10, canvas.height - 40, 200, 28);
+    ctx.fillStyle = '#ffdd44';
+    ctx.font = '14px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText(`Following: ${followers.length} survivor${followers.length > 1 ? 's' : ''} → Village`, 18, canvas.height - 22);
+  }
+
+  // Win check
+  if (village.population === totalSurvivors && totalSurvivors > 0) {
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(canvas.width/2 - 180, canvas.height/2 - 40, 360, 80);
+    ctx.fillStyle = '#ffdd00';
+    ctx.font = 'bold 28px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('ALL SURVIVORS RESCUED!', canvas.width/2, canvas.height/2);
+    ctx.fillStyle = '#fff';
+    ctx.font = '16px Arial';
+    ctx.fillText(`Village Population: ${village.population}`, canvas.width/2, canvas.height/2 + 25);
+  }
+
+  // Draw arrows
+  ctx.save();
+  ctx.translate(-camX, -camY);
+  for (const a of arrows) {
+    let angle = Math.atan2(a.targetY - a.y, a.targetX - a.x);
+    ctx.save();
+    ctx.translate(a.x, a.y);
+    ctx.rotate(angle);
+    // Arrow shaft
+    ctx.strokeStyle = '#6a4a20';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-8, 0);
+    ctx.lineTo(6, 0);
+    ctx.stroke();
+    // Arrow head
+    ctx.fillStyle = '#888';
+    ctx.beginPath();
+    ctx.moveTo(8, 0);
+    ctx.lineTo(4, -3);
+    ctx.lineTo(4, 3);
+    ctx.closePath();
+    ctx.fill();
+    // Fletching
+    ctx.fillStyle = '#cc3333';
+    ctx.beginPath();
+    ctx.moveTo(-8, 0);
+    ctx.lineTo(-6, -3);
+    ctx.lineTo(-5, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-8, 0);
+    ctx.lineTo(-6, 3);
+    ctx.lineTo(-5, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+
+  // Quest menu
+  if (questMenuOpen && questMenuTarget >= 0) {
+    let quest = activeQuests.find(q => q.giver === questMenuTarget);
+    if (quest) {
+      let menuW = 260, menuH = 160;
+      let menuX = canvas.width / 2 - menuW / 2;
+      let menuY = canvas.height / 2 - menuH / 2;
+
+      // Background
+      ctx.fillStyle = 'rgba(0,0,0,0.85)';
+      ctx.beginPath();
+      ctx.roundRect(menuX, menuY, menuW, menuH, 8);
+      ctx.fill();
+      ctx.strokeStyle = '#8a6a3a';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Title
+      ctx.fillStyle = '#ffdd44';
+      ctx.font = 'bold 15px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('Quest', menuX + menuW / 2, menuY + 22);
+
+      // Close X
+      ctx.fillStyle = '#cc4444';
+      ctx.font = 'bold 14px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('X', menuX + menuW - 15, menuY + 18);
+
+      // Quest description
+      ctx.fillStyle = '#fff';
+      ctx.font = '13px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText(quest.desc, menuX + menuW / 2, menuY + 48);
+
+      // Progress bar
+      let pbX = menuX + 20, pbY = menuY + 60, pbW = menuW - 40, pbH = 14;
+      ctx.fillStyle = '#333';
+      ctx.fillRect(pbX, pbY, pbW, pbH);
+      let pct = Math.min(quest.progress / quest.need, 1);
+      ctx.fillStyle = quest.done ? '#44cc44' : '#cc8833';
+      ctx.fillRect(pbX, pbY, pbW * pct, pbH);
+      ctx.strokeStyle = '#666';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(pbX, pbY, pbW, pbH);
+      ctx.fillStyle = '#fff';
+      ctx.font = '10px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${quest.progress} / ${quest.need}`, pbX + pbW / 2, pbY + 11);
+
+      // Reward info
+      ctx.fillStyle = '#aaa';
+      ctx.font = '11px Arial';
+      ctx.fillText(`Reward: ${ITEM_TYPES[quest.reward].name}`, menuX + menuW / 2, menuY + 98);
+
+      // Action button
+      let btnX = menuX + menuW / 2 - 50;
+      let btnY = menuY + menuH - 40;
+      let btnLabel = '';
+      let btnColor = '#444';
+      if (quest.done && !quest.turned_in) {
+        btnLabel = 'Turn In';
+        btnColor = '#44aa44';
+      } else if (quest.type === 'gather_food' || quest.type === 'gather_medkit') {
+        let itemType = quest.type === 'gather_food' ? 'food' : 'medkit';
+        let have = inventory.slots.filter(s => s === itemType).length;
+        btnLabel = have > 0 ? `Hand In (have ${have})` : 'Need Items';
+        btnColor = have > 0 ? '#aa8833' : '#444';
+      } else {
+        btnLabel = quest.done ? 'Turn In' : 'In Progress...';
+        btnColor = quest.done ? '#44aa44' : '#555';
+      }
+      ctx.fillStyle = btnColor;
+      ctx.beginPath();
+      ctx.roundRect(btnX, btnY, 100, 28, 4);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 12px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText(btnLabel, btnX + 50, btnY + 18);
+    }
+  }
+
+  // Watchtower menu
+  if (watchtowerMenuOpen) {
+    let menuW = 220, menuH = 200;
+    let menuX = canvas.width / 2 - menuW / 2;
+    let menuY = canvas.height / 2 - menuH / 2;
+
+    // Background
+    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+    ctx.beginPath();
+    ctx.roundRect(menuX, menuY, menuW, menuH, 8);
+    ctx.fill();
+    ctx.strokeStyle = '#8a6a3a';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Title
+    ctx.fillStyle = '#ffdd44';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Watchtower Jobs', menuX + menuW / 2, menuY + 22);
+
+    // Close X
+    ctx.fillStyle = '#cc4444';
+    ctx.font = 'bold 14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('X', menuX + menuW - 15, menuY + 18);
+
+    // Available villagers
+    let jobKeys = Object.keys(watchtowerJobs);
+    let totalAssigned = jobKeys.reduce((s, k) => s + watchtowerJobs[k].assigned, 0);
+    let available = village.population - totalAssigned;
+    ctx.fillStyle = '#aaa';
+    ctx.font = '11px Arial';
+    ctx.fillText(`Available: ${available} / ${village.population} villagers`, menuX + menuW / 2, menuY + 38);
+
+    // Job rows
+    for (let i = 0; i < jobKeys.length; i++) {
+      let job = watchtowerJobs[jobKeys[i]];
+      let rowY = menuY + 50 + i * 45;
+
+      // Job name and desc
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 13px Arial';
+      ctx.textAlign = 'left';
+      ctx.fillText(job.name, menuX + 10, rowY + 12);
+      ctx.fillStyle = '#999';
+      ctx.font = '10px Arial';
+      ctx.fillText(job.desc, menuX + 10, rowY + 25);
+
+      // Count
+      ctx.fillStyle = '#ffdd44';
+      ctx.font = 'bold 14px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${job.assigned}/${job.max}`, menuX + menuW - 65, rowY + 14);
+
+      // Plus button
+      ctx.fillStyle = job.assigned < job.max && available > 0 ? '#44aa44' : '#444';
+      ctx.beginPath();
+      ctx.roundRect(menuX + menuW - 55, rowY + 2, 20, 20, 3);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 14px Arial';
+      ctx.fillText('+', menuX + menuW - 45, rowY + 17);
+
+      // Minus button
+      ctx.fillStyle = job.assigned > 0 ? '#aa4444' : '#444';
+      ctx.beginPath();
+      ctx.roundRect(menuX + menuW - 30, rowY + 2, 20, 20, 3);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.fillText('-', menuX + menuW - 20, rowY + 17);
+    }
+  }
+
+  // Game Over screen
+  if (gameOver) {
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Red vignette
+    let vg = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 50, canvas.width/2, canvas.height/2, canvas.width/2);
+    vg.addColorStop(0, 'rgba(80,0,0,0.3)');
+    vg.addColorStop(1, 'rgba(30,0,0,0.6)');
+    ctx.fillStyle = vg;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // GAME OVER text
+    ctx.fillStyle = '#cc2222';
+    ctx.font = 'bold 52px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('GAME OVER', canvas.width/2, canvas.height/2 - 30);
+
+    // Stats
+    ctx.fillStyle = '#ddd';
+    ctx.font = '18px Arial';
+    let rescued = crashSites.filter(s => s.rescued).reduce((sum, s) => sum + s.survivors, 0);
+    ctx.fillText(`Survivors Rescued: ${rescued} / ${totalSurvivors}`, canvas.width/2, canvas.height/2 + 10);
+    ctx.fillText(`Village Population: ${village.population}`, canvas.width/2, canvas.height/2 + 35);
+
+    // Restart prompt
+    ctx.fillStyle = '#ffcc44';
+    ctx.font = 'bold 20px Arial';
+    let blink = Math.sin(Date.now() / 400) > 0;
+    if (blink) ctx.fillText('Press R to Restart', canvas.width/2, canvas.height/2 + 80);
+  }
+}
+
+// --- SAVE & LOAD ---
+function saveGame() {
+  let save = {
+    player: { x: player.x, y: player.y, health: player.health, facing: player.facing },
+    village: { population: village.population, buildings: village.buildings },
+    crashSites: crashSites.map(s => ({ rescued: s.rescued })),
+    wolves: wolves.map(w => ({ x: w.x, y: w.y, health: w.health, maxHealth: w.maxHealth, pack: w.pack, isAlpha: w.isAlpha, speed: w.speed })),
+    inventory: { slots: inventory.slots, selected: inventory.selected },
+    worldItems: worldItems.map(i => ({ collected: i.collected })),
+    villagePeople: villagePeople.map(vp => ({ x: vp.x, y: vp.y, color: vp.color, wanderAngle: vp.wanderAngle, hasQuest: vp.hasQuest || false })),
+    speedBoostTimer: speedBoostTimer,
+    shieldActive: shieldActive,
+    watchtowerJobs: { lookout: watchtowerJobs.lookout.assigned, scout: watchtowerJobs.scout.assigned, archer: watchtowerJobs.archer.assigned },
+    activeQuests: activeQuests.map(q => ({ id: q.id, giver: q.giver, desc: q.desc, type: q.type, need: q.need, progress: q.progress, reward: q.reward, done: q.done, turned_in: q.turned_in })),
+    wolfKillCount: wolfKillCount,
+    questIdCounter: questIdCounter
+  };
+  localStorage.setItem('jungleRescueSave', JSON.stringify(save));
+  notify('Game saved!');
+}
+
+function loadGame() {
+  let data = localStorage.getItem('jungleRescueSave');
+  if (!data) return false;
+  try {
+    let save = JSON.parse(data);
+    player.x = save.player.x;
+    player.y = save.player.y;
+    player.health = save.player.health;
+    player.facing = save.player.facing;
+    village.population = save.village.population;
+    village.buildings = save.village.buildings;
+    for (let i = 0; i < crashSites.length && i < save.crashSites.length; i++) {
+      crashSites[i].rescued = save.crashSites[i].rescued;
+    }
+    // Restore wolves
+    wolves.length = 0;
+    for (const w of save.wolves) {
+      wolves.push({
+        x: w.x, y: w.y, angle: Math.random() * Math.PI * 2,
+        speed: w.speed || 1.2, state: 'wander', attackTimer: 0,
+        facing: 'right', health: w.health, maxHealth: w.maxHealth,
+        pack: w.pack !== undefined ? w.pack : -1,
+        isAlpha: w.isAlpha || false
+      });
+    }
+    inventory.slots = save.inventory.slots;
+    inventory.selected = save.inventory.selected;
+    for (let i = 0; i < worldItems.length && i < save.worldItems.length; i++) {
+      worldItems[i].collected = save.worldItems[i].collected;
+    }
+    villagePeople.length = 0;
+    for (const vp of save.villagePeople) {
+      villagePeople.push({ x: vp.x, y: vp.y, color: vp.color, wanderAngle: vp.wanderAngle, hasQuest: vp.hasQuest || false });
+    }
+    speedBoostTimer = save.speedBoostTimer || 0;
+    shieldActive = save.shieldActive || false;
+    if (save.watchtowerJobs) {
+      watchtowerJobs.lookout.assigned = save.watchtowerJobs.lookout || 0;
+      watchtowerJobs.scout.assigned = save.watchtowerJobs.scout || 0;
+      watchtowerJobs.archer.assigned = save.watchtowerJobs.archer || 0;
+    }
+    // Restore quests
+    if (save.activeQuests) {
+      activeQuests.length = 0;
+      for (const q of save.activeQuests) {
+        activeQuests.push({ id: q.id, giver: q.giver, desc: q.desc, type: q.type, need: q.need, progress: q.progress, reward: q.reward, done: q.done, turned_in: q.turned_in });
+      }
+      wolfKillCount = save.wolfKillCount || 0;
+      questIdCounter = save.questIdCounter || 0;
+    }
+    followers.length = 0;
+    player.carrying = 0;
+    document.getElementById('rescued').textContent =
+      crashSites.filter(s => s.rescued).reduce((sum, s) => sum + s.survivors, 0);
+    document.getElementById('village').textContent = village.population;
+    return true;
+  } catch(e) { return false; }
+}
+
+document.getElementById('save-btn').addEventListener('click', () => {
+  saveGame();
+  paused = false;
+  pauseOverlay.classList.remove('active');
+  pauseBtn.innerHTML = '<span class="pause-icon"><span></span><span></span></span>';
+  pauseBtn.title = 'Pause';
+  inMainMenu = true;
+  document.getElementById('pause-btn').style.display = 'none';
+  document.getElementById('fs-btn').style.display = 'none';
+  document.getElementById('save-btn').style.display = 'none';
+});
+
+// Save loading now handled by main menu Continue button
+
+// --- MAIN MENU ---
+let inMainMenu = true;
+let menuAnimTimer = 0;
+
+function drawMainMenu() {
+  menuAnimTimer++;
+  let cx = canvas.width / 2;
+  let cy = canvas.height / 2;
+
+  // Background - dark jungle gradient
+  let bg = ctx.createRadialGradient(cx, cy, 50, cx, cy, 450);
+  bg.addColorStop(0, '#1a2e0a');
+  bg.addColorStop(1, '#0a1204');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Subtle leaf/vine pattern
+  ctx.strokeStyle = 'rgba(40,80,20,0.15)';
+  ctx.lineWidth = 1.5;
+  for (let i = 0; i < 12; i++) {
+    let vx = (i * 73 + 20) % canvas.width;
+    ctx.beginPath();
+    ctx.moveTo(vx, 0);
+    for (let y = 0; y < canvas.height; y += 20) {
+      ctx.lineTo(vx + Math.sin(y * 0.03 + i) * 15, y);
+    }
+    ctx.stroke();
+  }
+
+  // Ground line
+  let groundY = cy + 100;
+  ctx.fillStyle = '#1a2e0a';
+  ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
+  ctx.strokeStyle = '#2d5a1e';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, groundY);
+  ctx.lineTo(canvas.width, groundY);
+  ctx.stroke();
+
+
+  // Game title - top left
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.7)';
+  ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 2; ctx.shadowBlur = 6;
+  ctx.fillStyle = '#ffdd44';
+  ctx.font = 'bold 36px Arial';
+  ctx.textAlign = 'left';
+  ctx.fillText('Jungle Rescue', 30, 50);
+  ctx.fillStyle = '#f0e8d0';
+  ctx.font = 'bold 20px Arial';
+  ctx.fillText('Village', 32, 76);
+  ctx.restore();
+
+  // Character - to the left of start button, standing on ground
+  let charX = cx - 120;
+  let charY = groundY - 40;
+  let charSize = 112;
+
+  // Action cycle: idle(0-240), look around(240-480), walk(480-800), whip(800-960), idle(960-1080)
+  let actionCycle = menuAnimTimer % 1080;
+  let charFacing = 'right';
+  let charMoving = false;
+
+  if (actionCycle < 240) {
+    // Idle - gentle breathing bob
+    charY += Math.sin(menuAnimTimer * 0.03) * 1.5;
+  } else if (actionCycle < 480) {
+    // Look around
+    let lookPhase = actionCycle - 240;
+    if (lookPhase < 80) charFacing = 'right';
+    else if (lookPhase < 160) charFacing = 'left';
+    else charFacing = 'right';
+    charY += Math.sin(menuAnimTimer * 0.03) * 1.5;
+  } else if (actionCycle < 800) {
+    // Walk in place
+    charMoving = true;
+    walkTimer = menuAnimTimer;
+    charY += Math.sin(menuAnimTimer * 0.03) * 1;
+  } else if (actionCycle < 960) {
+    // Whip crack
+    let whipPhase = (actionCycle - 800) / 2;
+    charY += Math.sin(menuAnimTimer * 0.03) * 1;
+    // Draw the character first, then overlay whip animation
+    drawBean(charX, charY, charSize, '#6b3a1a', 'right', true, false);
+
+    // Whip crack animation
+    ctx.save();
+    ctx.translate(charX, charY);
+    let s = charSize;
+    ctx.strokeStyle = '#3a2008';
+    ctx.lineWidth = s * 0.035;
+    ctx.lineCap = 'round';
+    if (whipPhase < 20) {
+      // Wind up
+      let t = whipPhase / 20;
+      ctx.beginPath();
+      ctx.moveTo(s * 0.28, -s * 0.05);
+      ctx.quadraticCurveTo(s * 0.4, -s * 0.2 * t, s * 0.35 + t * s * 0.1, -s * 0.3 * t);
+      ctx.stroke();
+    } else if (whipPhase < 50) {
+      // Crack forward
+      let t = (whipPhase - 20) / 30;
+      let extend = t * s * 1.8;
+      ctx.beginPath();
+      ctx.moveTo(s * 0.28, -s * 0.05);
+      let wt = whipPhase * 0.5;
+      ctx.quadraticCurveTo(s * 0.4 + extend * 0.3, -s * 0.15 + Math.sin(wt) * 4, s * 0.3 + extend, -s * 0.05 + Math.sin(wt * 1.3) * 3);
+      ctx.stroke();
+      // Crack spark at tip
+      if (whipPhase > 25 && whipPhase < 35) {
+        let sparkX = s * 0.3 + extend;
+        let sparkY = -s * 0.05 + Math.sin(wt * 1.3) * 3;
+        ctx.fillStyle = '#ffdd44';
+        for (let sp = 0; sp < 4; sp++) {
+          let sa = Math.random() * Math.PI * 2;
+          let sr = 2 + Math.random() * 4;
+          ctx.beginPath();
+          ctx.arc(sparkX + Math.cos(sa) * sr, sparkY + Math.sin(sa) * sr, 1.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    } else {
+      // Retract
+      let t = 1 - (whipPhase - 50) / 30;
+      let extend = Math.max(0, t) * s * 1.2;
+      ctx.beginPath();
+      ctx.moveTo(s * 0.28, -s * 0.05);
+      ctx.quadraticCurveTo(s * 0.3 + extend * 0.3, s * 0.05, s * 0.2 + extend * 0.5, s * 0.1);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // Skip the normal draw below since we already drew the character
+    // Store button bounds and continue
+    actionCycle = -1; // flag to skip drawBean below
+  } else {
+    // Brief idle
+    charY += Math.sin(menuAnimTimer * 0.03) * 1.5;
+  }
+
+  if (actionCycle >= 0) {
+    drawBean(charX, charY, charSize, '#6b3a1a', charFacing, true, charMoving);
+  }
+
+  // Start button
+  let btnW = 160, btnH = 40;
+  let btnX = cx - 10;
+  let btnY = groundY - btnH / 2 - 18;
+
+  // Button background - classic embossed style
+  let btnGrad = ctx.createLinearGradient(btnX, btnY, btnX, btnY + btnH);
+  btnGrad.addColorStop(0, '#6a5a3a');
+  btnGrad.addColorStop(0.5, '#4a3a20');
+  btnGrad.addColorStop(0.51, '#3a2a14');
+  btnGrad.addColorStop(1, '#4a3a20');
+  ctx.fillStyle = btnGrad;
+  ctx.beginPath();
+  ctx.roundRect(btnX, btnY, btnW, btnH, 4);
+  ctx.fill();
+  // Border
+  ctx.strokeStyle = '#8a7a50';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  // Inner highlight
+  ctx.strokeStyle = 'rgba(255,255,200,0.15)';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.roundRect(btnX + 1, btnY + 1, btnW - 2, btnH - 2, 3);
+  ctx.stroke();
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.roundRect(btnX + 2, btnY + btnH + 1, btnW - 4, 4, 2);
+  ctx.fill();
+
+  // Button text
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.5)';
+  ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 1; ctx.shadowBlur = 2;
+  ctx.fillStyle = '#f0e8d0';
+  ctx.font = 'bold 18px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('START', btnX + btnW / 2, btnY + btnH / 2 + 6);
+  ctx.restore();
+
+  // Continue button if save exists
+  if (localStorage.getItem('jungleRescueSave')) {
+    let cBtnY = btnY + btnH + 16;
+    let cBtnGrad = ctx.createLinearGradient(btnX, cBtnY, btnX, cBtnY + btnH);
+    cBtnGrad.addColorStop(0, '#4a5a3a');
+    cBtnGrad.addColorStop(0.5, '#3a4a20');
+    cBtnGrad.addColorStop(0.51, '#2a3a14');
+    cBtnGrad.addColorStop(1, '#3a4a20');
+    ctx.fillStyle = cBtnGrad;
+    ctx.beginPath();
+    ctx.roundRect(btnX, cBtnY, btnW, btnH, 4);
+    ctx.fill();
+    ctx.strokeStyle = '#7a8a50';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,200,0.1)';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.roundRect(btnX + 1, cBtnY + 1, btnW - 2, btnH - 2, 3);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.roundRect(btnX + 2, cBtnY + btnH + 1, btnW - 4, 4, 2);
+    ctx.fill();
+
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+    ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 1; ctx.shadowBlur = 2;
+    ctx.fillStyle = '#d0e8b0';
+    ctx.font = 'bold 18px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('CONTINUE', btnX + btnW / 2, cBtnY + btnH / 2 + 6);
+    ctx.restore();
+  }
+
+  // Controls panel - right side
+  let cpX = canvas.width - 230, cpY = 100;
+  let cpW = 210, controls = [
+    ['WASD / Arrows', 'Move'],
+    ['F', 'Whip Attack'],
+    ['E', 'Use Item'],
+    ['1 - 5', 'Select Item'],
+    ['P', 'Pause'],
+    ['Esc', 'Exit Fullscreen'],
+    ['Click', 'Interact'],
+  ];
+  let cpH = 32 + controls.length * 24;
+
+  // Panel background
+  let cpGrad = ctx.createLinearGradient(cpX, cpY, cpX, cpY + cpH);
+  cpGrad.addColorStop(0, 'rgba(50,40,24,0.85)');
+  cpGrad.addColorStop(1, 'rgba(35,28,16,0.85)');
+  ctx.fillStyle = cpGrad;
+  ctx.beginPath();
+  ctx.roundRect(cpX, cpY, cpW, cpH, 4);
+  ctx.fill();
+  ctx.strokeStyle = '#8a7a50';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,200,0.08)';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.roundRect(cpX + 1, cpY + 1, cpW - 2, cpH - 2, 3);
+  ctx.stroke();
+
+  // Title
+  ctx.fillStyle = '#ffdd44';
+  ctx.font = 'bold 13px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('CONTROLS', cpX + cpW / 2, cpY + 20);
+
+  // Divider
+  ctx.strokeStyle = 'rgba(138,122,80,0.4)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cpX + 10, cpY + 28);
+  ctx.lineTo(cpX + cpW - 10, cpY + 28);
+  ctx.stroke();
+
+  // Control rows
+  for (let i = 0; i < controls.length; i++) {
+    let rowY = cpY + 46 + i * 24;
+    // Key
+    ctx.fillStyle = '#f0e8d0';
+    ctx.font = 'bold 11px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText(controls[i][0], cpX + 12, rowY);
+    // Action
+    ctx.fillStyle = '#aa9a70';
+    ctx.font = '11px Arial';
+    ctx.textAlign = 'right';
+    ctx.fillText(controls[i][1], cpX + cpW - 12, rowY);
+  }
+
+  // Store button bounds for click detection
+  drawMainMenu._btnX = btnX;
+  drawMainMenu._btnY = btnY;
+  drawMainMenu._btnW = btnW;
+  drawMainMenu._btnH = btnH;
+}
+
+canvas.addEventListener('click', function mainMenuClick(e) {
+  if (!inMainMenu) return;
+  let rect = canvas.getBoundingClientRect();
+  let scaleX = canvas.width / rect.width;
+  let scaleY = canvas.height / rect.height;
+  let mx = (e.clientX - rect.left) * scaleX;
+  let my = (e.clientY - rect.top) * scaleY;
+
+  let btnX = drawMainMenu._btnX;
+  let btnY = drawMainMenu._btnY;
+  let btnW = drawMainMenu._btnW;
+  let btnH = drawMainMenu._btnH;
+  if (!btnX) return;
+
+  // Start button
+  if (mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH) {
+    inMainMenu = false;
+    document.getElementById('pause-btn').style.display = '';
+    document.getElementById('fs-btn').style.display = '';
+    document.getElementById('save-btn').style.display = '';
+    return;
+  }
+
+  // Continue button
+  if (localStorage.getItem('jungleRescueSave')) {
+    let cBtnY = btnY + btnH + 16;
+    if (mx >= btnX && mx <= btnX + btnW && my >= cBtnY && my <= cBtnY + btnH) {
+      loadGame();
+      notify('Save loaded! Welcome back.');
+      inMainMenu = false;
+      document.getElementById('pause-btn').style.display = '';
+      document.getElementById('fs-btn').style.display = '';
+      document.getElementById('save-btn').style.display = '';
+      return;
+    }
+  }
+});
+
+// --- PAUSE ---
+let paused = false;
+let gameOver = false;
+const pauseBtn = document.getElementById('pause-btn');
+const pauseOverlay = document.getElementById('pause-overlay');
+
+pauseBtn.addEventListener('click', togglePause);
+window.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.fullscreenElement) {
+    document.exitFullscreen();
+  } else if (e.key === 'p' || e.key === 'P') togglePause();
+  // Hotbar selection (1-5)
+  if (e.key >= '1' && e.key <= '5') inventory.selected = parseInt(e.key) - 1;
+  // Use item (E key)
+  if ((e.key === 'e' || e.key === 'E') && !gameOver && !paused) {
+    let item = inventory.slots[inventory.selected];
+    if (item) {
+      let used = false;
+      if (item === 'medkit') {
+        if (player.health < player.maxHealth) {
+          player.health = Math.min(player.maxHealth, player.health + 3);
+          notify('Used Medkit! +3 HP');
+          used = true;
+        }
+      } else if (item === 'food') {
+        if (player.health < player.maxHealth) {
+          player.health = Math.min(player.maxHealth, player.health + 1);
+          notify('Ate Food! +1 HP');
+          used = true;
+        }
+      } else if (item === 'speed') {
+        speedBoostTimer = 600; // 10 seconds
+        notify('Speed Boost activated!');
+        used = true;
+      } else if (item === 'shield') {
+        shieldActive = true;
+        notify('Shield activated! Blocks 1 hit');
+        used = true;
+      }
+      if (used) inventory.slots[inventory.selected] = null;
+    }
+  }
+  if ((e.key === 'r' || e.key === 'R') && gameOver) {
+    // Restart
+    player.health = player.maxHealth;
+    player.x = WORLD_W / 2;
+    player.y = WORLD_H / 2;
+    player.hurtTimer = 0;
+    player.invincible = 60;
+    gameOver = false;
+    // Reset crash sites
+    for (const site of crashSites) { site.rescued = false; }
+    followers.length = 0;
+    player.carrying = 0;
+    villagePeople.length = 0;
+    village.population = 0;
+    village.buildings.length = 0;
+    document.getElementById('rescued').textContent = 0;
+    document.getElementById('village').textContent = 0;
+    // Reset quests
+    activeQuests.length = 0;
+    questIdCounter = 0;
+    wolfKillCount = 0;
+    questMenuOpen = false;
+    questMenuTarget = -1;
+    // Reset inventory
+    inventory.slots = [null, null, null, null, null];
+    inventory.selected = 0;
+    speedBoostTimer = 0;
+    shieldActive = false;
+    for (const item of worldItems) item.collected = false;
+    // Scatter wolves away from player and restore health
+    for (const wolf of wolves) {
+      wolf.x = BORDER + 50 + Math.random() * (WORLD_W - BORDER * 2 - 100);
+      wolf.y = BORDER + 50 + Math.random() * (WORLD_H - BORDER * 2 - 100);
+      wolf.state = 'wander';
+      wolf.health = wolf.maxHealth;
+    }
+    // Respawn dead wolves (re-add if pack wolves were killed)
+    while (wolves.length < 10) {
+      let wx = BORDER + 50 + Math.random() * (WORLD_W - BORDER * 2 - 100);
+      let wy = BORDER + 50 + Math.random() * (WORLD_H - BORDER * 2 - 100);
+      wolves.push({ x: wx, y: wy, angle: Math.random() * Math.PI * 2, speed: 1.2, state: 'wander', attackTimer: 0, facing: 'right', health: 3, maxHealth: 3, pack: -1 });
+    }
+  }
+});
+
+function togglePause() {
+  paused = !paused;
+  pauseBtn.innerHTML = paused ? '<span class="play-icon"></span>' : '<span class="pause-icon"><span></span><span></span></span>';
+  pauseBtn.title = paused ? 'Resume' : 'Pause';
+  pauseOverlay.classList.toggle('active', paused);
+}
+
+// --- GAME LOOP ---
+function gameLoop() {
+  if (inMainMenu) {
+    drawMainMenu();
+  } else {
+    if (!paused && !gameOver) {
+      update();
+    }
+    draw();
+  }
+  requestAnimationFrame(gameLoop);
+}
+
+gameLoop();
+</script>
+</body>
+</html>
