@@ -67,6 +67,9 @@
 
   /* Mobile layout */
   #mobile-controls { display: none; }
+  @media (min-width: 1025px) {
+    #mobile-controls { display: none !important; }
+  }
   #rotate-prompt { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 999; justify-content: center; align-items: center; flex-direction: column; color: #f0e8d0; font-family: Arial; text-align: center; }
   #rotate-prompt .rotate-icon { font-size: 60px; margin-bottom: 20px; }
   #rotate-prompt .rotate-text { font-size: 20px; }
@@ -78,7 +81,8 @@
     #mobile-controls { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 20; }
     .touch-zone { pointer-events: auto; position: absolute; top: 50px; height: calc(100% - 50px); display: flex; justify-content: center; align-items: center; }
     .touch-zone-left { left: 0; width: 120px; background: rgba(0,0,0,0.85); flex-direction: column; gap: 10px; }
-    .touch-zone-right { right: 0; width: 120px; background: rgba(0,0,0,0.85); }
+    .touch-zone-right { right: 0; width: 120px; background: rgba(0,0,0,0.85); flex-direction: column; gap: 16px; }
+    #minimap-canvas { width: 100px; height: 100px; background: rgba(0,30,0,0.7); border: 1px solid #4a4; display: block; }
     .mobile-action-btn { width: 70px; height: 50px; border-radius: 8px; background: linear-gradient(to bottom, #6a5a3a, #3a2a14); border: 2px solid #8a7a50; color: #f0e8d0; font-family: Arial; font-weight: bold; font-size: 11px; text-transform: uppercase; cursor: pointer; display: flex; justify-content: center; align-items: center; box-shadow: inset 0 1px 0 rgba(255,255,200,0.2), 0 2px 6px rgba(0,0,0,0.5); touch-action: none; user-select: none; -webkit-user-select: none; }
     .mobile-action-btn:active { background: linear-gradient(to bottom, #3a2a14, #4a3a20); }
     .mobile-circle-btn { width: 70px; height: 70px; border-radius: 50%; }
@@ -86,8 +90,8 @@
     #joystick-base { width: 100px; height: 100px; border-radius: 50%; background: rgba(255,255,255,0.08); border: 2px solid rgba(138,122,80,0.5); position: absolute; top: 0; left: 0; }
     #joystick-thumb { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(to bottom, #6a5a3a, #3a2a14); border: 2px solid #8a7a50; position: absolute; top: 30px; left: 30px; box-shadow: 0 2px 6px rgba(0,0,0,0.5); }
     #fs-btn { display: none !important; }
-    #save-btn { right: auto; left: 50%; transform: translateX(-50%); }
-    #pause-btn { right: auto; left: calc(50% + 70px); }
+    #save-btn { right: auto; left: 10px; transform: none; top: 10px; padding: 0; font-size: 11px; line-height: 1.2; text-align: center; width: 62px; height: 40px; box-sizing: border-box; display: flex; justify-content: center; align-items: center; }
+    #pause-btn { right: auto; left: 78px; top: 10px; padding: 0; width: 40px; height: 40px; box-sizing: border-box; display: flex; justify-content: center; align-items: center; }
   }
   @media (max-width: 1024px) and (pointer: coarse) and (orientation: portrait) {
     #rotate-prompt { display: flex; }
@@ -116,6 +120,7 @@
       <div id="joystick-base"></div>
       <div id="joystick-thumb"></div>
     </div>
+    <canvas id="minimap-canvas" width="100" height="100"></canvas>
   </div>
 </div>
 <div id="rotate-prompt">
@@ -481,6 +486,20 @@ for (let i = 0; i < 8; i++) {
   });
 }
 
+// Mine location (placed far from village)
+let mineX, mineY;
+do {
+  mineX = BORDER + 100 + Math.random() * (WORLD_W - BORDER * 2 - 200);
+  mineY = BORDER + 100 + Math.random() * (WORLD_H - BORDER * 2 - 200);
+} while ((Math.abs(mineX - WORLD_W/2) < 400 && Math.abs(mineY - WORLD_H/2) < 400) ||
+  nearRiver(mineX, mineY, RIVER_WIDTH + 30));
+const mine = { x: mineX, y: mineY };
+
+// Clear trees near the mine
+for (let i = trees.length - 1; i >= 0; i--) {
+  if (Math.hypot(trees[i].x - mine.x, trees[i].y - mine.y) < 50) trees.splice(i, 1);
+}
+
 // Wolves - lone wolves + packs
 const wolves = [];
 // 4 lone wolves
@@ -627,7 +646,7 @@ const buildingTypes = [
 let walkTimer = 0;
 
 // Draw a person with head, torso, arms, legs that animate
-function drawBean(x, y, size, bodyColor, facingDir, isPlayer, isMoving) {
+function drawBean(x, y, size, bodyColor, facingDir, isPlayer, isMoving, isMiner) {
   const s = size;
   ctx.save();
   ctx.translate(x, y);
@@ -644,7 +663,7 @@ function drawBean(x, y, size, bodyColor, facingDir, isPlayer, isMoving) {
 
   const skinColor = '#f5c28a';
   const shoeColor = '#333';
-  const pantsColor = isPlayer ? '#8a7a55' : '#3355aa';
+  const pantsColor = isPlayer ? '#8a7a55' : isMiner ? '#5a4a3a' : '#3355aa';
   const limbWidth = s * 0.1;
 
   // --- LEGS ---
@@ -852,6 +871,57 @@ function drawBean(x, y, size, bodyColor, facingDir, isPlayer, isMoving) {
     ctx.fillRect(-s * 0.03, s * 0.075, s * 0.06, s * 0.04);
   }
 
+  // Miner style
+  if (isMiner) {
+    // Hard hat
+    ctx.fillStyle = '#ddaa00';
+    ctx.beginPath();
+    ctx.ellipse(0, -s * 0.42, s * 0.25, s * 0.06, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Hat dome
+    ctx.fillStyle = '#eebb10';
+    ctx.beginPath();
+    ctx.arc(0, -s * 0.48, s * 0.18, Math.PI, 0);
+    ctx.closePath();
+    ctx.fill();
+    // Hat ridge
+    ctx.fillStyle = '#cc9900';
+    ctx.fillRect(-s * 0.18, -s * 0.44, s * 0.36, s * 0.03);
+    // Headlamp
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(0, -s * 0.45, s * 0.04, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffff88';
+    ctx.beginPath();
+    ctx.arc(0, -s * 0.45, s * 0.025, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Pickaxe on back (idle)
+    ctx.strokeStyle = '#7a5a20';
+    ctx.lineWidth = s * 0.04;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.15, -s * 0.25);
+    ctx.lineTo(-s * 0.3, s * 0.15);
+    ctx.stroke();
+    // Pickaxe head
+    ctx.fillStyle = '#888';
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.22, -s * 0.28);
+    ctx.lineTo(-s * 0.08, -s * 0.22);
+    ctx.lineTo(-s * 0.1, -s * 0.18);
+    ctx.lineTo(-s * 0.24, -s * 0.24);
+    ctx.closePath();
+    ctx.fill();
+
+    // Belt with tool loops
+    ctx.fillStyle = '#5a3a10';
+    ctx.fillRect(-s * 0.2, s * 0.08, s * 0.4, s * 0.035);
+    ctx.fillStyle = '#bb9944';
+    ctx.fillRect(-s * 0.03, s * 0.075, s * 0.06, s * 0.04);
+  }
+
   ctx.restore();
 }
 
@@ -880,6 +950,11 @@ window.addEventListener('keydown', e => { keys[e.key] = true; e.preventDefault()
 
 // Click on watchtower or menu
 canvas.addEventListener('click', e => {
+  // Tap to advance NPC speech bubble (mobile)
+  if (troubledPerson.speechWaiting && troubledPerson.speechTimer > 0) {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' }));
+    return;
+  }
   // Click anywhere to restart on game over
   if (gameOver) {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'R' }));
@@ -949,7 +1024,12 @@ canvas.addEventListener('click', e => {
     let btnY = menuY + menuH - 40;
     if (mx > btnX && mx < btnX + 100 && my > btnY && my < btnY + 28) {
       let quest = activeQuests.find(q => q.giver === questMenuTarget);
-      if (quest && quest.done && !quest.turned_in) {
+      if (quest && !quest.accepted) {
+        quest.accepted = true;
+        notify(`Quest accepted: ${quest.desc}`);
+        questMenuOpen = false;
+        questMenuTarget = -1;
+      } else if (quest && quest.done && !quest.turned_in) {
         // Turn in - give reward
         let emptySlot = inventory.slots.indexOf(null);
         if (emptySlot !== -1) {
@@ -1029,6 +1109,32 @@ window.addEventListener('keyup', e => { keys[e.key] = false; });
 // Notification system
 let notification = '';
 let notifyTimer = 0;
+let helpYellTriggered = false;
+let helpYellActive = false;
+let helpYellX = 0;
+let troubledPersonFound = false;
+let mineFound = false;
+const troubledPerson = {
+  x: 320, y: 320,
+  facing: 'down',
+  active: false,
+  found: false,
+  following: false,
+  movingFollow: false,
+  wolvesSpawned: false,
+  attackTimer: 0,
+  walkTimer: 0,
+  health: 8,
+  maxHealth: 8,
+  hurtTimer: 0,
+  invincible: 0,
+  whip: { active: false, timer: 0, x: 0, y: 0, endX: 0, endY: 0 },
+  speechText: '',
+  speechTimer: 0,
+  speechPhase: 0,
+  speechWaiting: false
+};
+const TROUBLED_PACK_ID = 99;
 function notify(msg) {
   notification = msg;
   notifyTimer = 180; // 3 seconds at 60fps
@@ -1186,6 +1292,18 @@ function update() {
     }
   }
 
+  // Check mine discovery (player and miner must both be near)
+  if (!mineFound && troubledPersonFound && troubledPerson.following) {
+    let playerDist = Math.hypot(player.x - mine.x, player.y - mine.y);
+    let minerDist = Math.hypot(troubledPerson.x - mine.x, troubledPerson.y - mine.y);
+    if (playerDist < 50 && minerDist < 70) {
+      mineFound = true;
+      troubledPerson.active = false;
+      troubledPerson.following = false;
+      notify('You found the mine! The village has a future!');
+    }
+  }
+
   // Followers follow the player in a chain
   for (let i = 0; i < followers.length; i++) {
     let target = i === 0 ? player : followers[i - 1];
@@ -1241,7 +1359,8 @@ function update() {
           progress: 0,
           reward: tmpl.reward,
           done: false,
-          turned_in: false
+          turned_in: false,
+          accepted: false
         });
         villagePeople[vpIdx].hasQuest = true;
       }
@@ -1416,15 +1535,42 @@ function update() {
   }
 
   for (const wolf of wolves) {
+    // Retreating quest wolves flee and disappear
+    if (wolf.retreating) {
+      let fleeFromX = troubledPerson.active ? troubledPerson.x : player.x;
+      let fleeFromY = troubledPerson.active ? troubledPerson.y : player.y;
+      let fdx = wolf.x - fleeFromX, fdy = wolf.y - fleeFromY;
+      let flen = Math.hypot(fdx, fdy) || 1;
+      let fspd = wolf.speed * 1.8;
+      wolf.x += (fdx / flen) * fspd;
+      wolf.y += (fdy / flen) * fspd;
+      wolf.facing = fdx > 0 ? 'right' : 'left';
+      wolf.state = 'wander';
+      wolf.retreatTimer--;
+      if (wolf.retreatTimer <= 0) wolf._remove = true;
+      continue;
+    }
+
     let distToPlayer = Math.hypot(player.x - wolf.x, player.y - wolf.y);
+
+    // Quest-pack wolves also target the NPC — pick closer one
+    let tgtX = player.x, tgtY = player.y, tgtIsNpc = false;
+    let distToTarget = distToPlayer;
+    if (wolf.pack === TROUBLED_PACK_ID && troubledPerson.active && troubledPerson.found) {
+      let distToNpc = Math.hypot(troubledPerson.x - wolf.x, troubledPerson.y - wolf.y);
+      if (distToNpc < distToPlayer) {
+        tgtX = troubledPerson.x; tgtY = troubledPerson.y; tgtIsNpc = true;
+        distToTarget = distToNpc;
+      }
+    }
 
     // Pack wolves get alerted if ANY packmate spotted the player
     let isAlerted = (wolf.pack >= 0 && alertedPacks.has(wolf.pack));
-    let shouldChase = (distToPlayer < WOLF_DETECT || isAlerted) && !playerInVillage;
+    let shouldChase = (distToTarget < WOLF_DETECT || isAlerted) && !playerInVillage;
 
     if (shouldChase) {
       wolf.state = 'chase';
-      let chaseAngle = Math.atan2(player.y - wolf.y, player.x - wolf.x);
+      let chaseAngle = Math.atan2(tgtY - wolf.y, tgtX - wolf.x);
 
       // Pack wolves try to flank — offset angle based on their index in pack
       if (wolf.pack >= 0 && !wolf.isAlpha) {
@@ -1444,7 +1590,22 @@ function update() {
       }
 
       // Attack when close
-      if (distToPlayer < WOLF_ATTACK && player.invincible <= 0) {
+      if (tgtIsNpc) {
+        if (distToTarget < WOLF_ATTACK && troubledPerson.invincible <= 0) {
+          wolf.state = 'attack';
+          wolf.attackTimer = 20;
+          troubledPerson.health--;
+          troubledPerson.hurtTimer = 30;
+          troubledPerson.invincible = 60;
+          let kb = 15;
+          let kbAngle = Math.atan2(troubledPerson.y - wolf.y, troubledPerson.x - wolf.x);
+          troubledPerson.x += Math.cos(kbAngle) * kb;
+          troubledPerson.y += Math.sin(kbAngle) * kb;
+          troubledPerson.x = Math.max(BORDER, Math.min(WORLD_W - BORDER, troubledPerson.x));
+          troubledPerson.y = Math.max(BORDER, Math.min(WORLD_H - BORDER, troubledPerson.y));
+          if (troubledPerson.health <= 0) troubledPerson.health = 0;
+        }
+      } else if (distToPlayer < WOLF_ATTACK && player.invincible <= 0) {
         wolf.state = 'attack';
         wolf.attackTimer = 20;
         if (shieldActive) {
@@ -1580,6 +1741,10 @@ function update() {
     if (a.life <= 0) arrows.splice(i, 1);
   }
 
+  // Remove retreated wolves (no kill credit)
+  for (let i = wolves.length - 1; i >= 0; i--) {
+    if (wolves[i]._remove) wolves.splice(i, 1);
+  }
   // Remove dead wolves
   for (let i = wolves.length - 1; i >= 0; i--) {
     if (wolves[i].health <= 0) {
@@ -1597,6 +1762,165 @@ function update() {
 
   // Advance walk animation
   if (dx !== 0 || dy !== 0) walkTimer++;
+
+  // --- TROUBLED PERSON QUEST ---
+  {
+    let _rescuedAllTP = village.population >= totalSurvivors && totalSurvivors > 0;
+    let _sideQuestsDoneTP = activeQuests.filter(q => q.turned_in).length >= 3;
+    if (_rescuedAllTP && _sideQuestsDoneTP && !troubledPersonFound) {
+      troubledPerson.active = true;
+    }
+  }
+  if (troubledPerson.active && !troubledPersonFound) {
+    if (troubledPerson.hurtTimer > 0) troubledPerson.hurtTimer--;
+    if (troubledPerson.invincible > 0) troubledPerson.invincible--;
+    // Low-health retreat trigger
+    if (troubledPerson.found && !troubledPerson.retreatTriggered && troubledPerson.health <= 1) {
+      troubledPerson.retreatTriggered = true;
+      for (const w of wolves) {
+        if (w.pack === TROUBLED_PACK_ID) { w.retreating = true; w.retreatTimer = 120; }
+      }
+      troubledPerson.speechText = "Thanks! I know where a mine is. Let's go!";
+      troubledPerson.speechTimer = 9999;
+      troubledPerson.speechWaiting = true;
+      troubledPerson.speechPhase = 3;
+    }
+    // Player finds the NPC
+    if (!troubledPerson.found) {
+      let ddx = player.x - troubledPerson.x, ddy = player.y - troubledPerson.y;
+      if (Math.hypot(ddx, ddy) < 40) {
+        troubledPerson.found = true;
+        if (!troubledPerson.wolvesSpawned) {
+          troubledPerson.wolvesSpawned = true;
+          for (let i = 0; i < 4; i++) {
+            let isAlpha = i === 0;
+            let wx, wy, tries = 0;
+            do {
+              let ang = Math.random() * Math.PI * 2;
+              let dist = 90 + Math.random() * 20;
+              wx = troubledPerson.x + Math.cos(ang) * dist;
+              wy = troubledPerson.y + Math.sin(ang) * dist;
+              tries++;
+            } while (Math.hypot(wx - player.x, wy - player.y) < 90 && tries < 20);
+            wolves.push({
+              x: wx, y: wy,
+              angle: Math.random() * Math.PI * 2,
+              speed: isAlpha ? 1.4 : 1.2,
+              state: 'chase',
+              attackTimer: 0,
+              facing: 'right',
+              health: isAlpha ? 5 : 3,
+              maxHealth: isAlpha ? 5 : 3,
+              pack: TROUBLED_PACK_ID,
+              isAlpha: isAlpha
+            });
+          }
+        }
+        // First speech line
+        troubledPerson.speechText = "Help! Wolves attacked me at the mine!";
+        troubledPerson.speechTimer = 9999;
+        troubledPerson.speechWaiting = true;
+        troubledPerson.speechPhase = 1;
+      }
+    } else {
+      // Advance speech bubble (wait for space)
+      if (troubledPerson.speechTimer > 0 && !troubledPerson.speechWaiting) {
+        troubledPerson.speechTimer--;
+      }
+
+      // AI: move toward nearest quest wolf, whip attack like player
+      let target = null, tbest = Infinity;
+      for (const w of wolves) {
+        if (w.pack !== TROUBLED_PACK_ID) continue;
+        let d = Math.hypot(w.x - troubledPerson.x, w.y - troubledPerson.y);
+        if (d < tbest) { tbest = d; target = w; }
+      }
+      if (target) {
+        let tdx = target.x - troubledPerson.x;
+        let tdy = target.y - troubledPerson.y;
+        let tlen = Math.hypot(tdx, tdy) || 1;
+        if (Math.abs(tdx) > Math.abs(tdy)) troubledPerson.facing = tdx > 0 ? 'right' : 'left';
+        else troubledPerson.facing = tdy > 0 ? 'down' : 'up';
+        if (tlen > 60) {
+          let spd = player.speed;
+          troubledPerson.x += (tdx / tlen) * spd;
+          troubledPerson.y += (tdy / tlen) * spd;
+          troubledPerson.walkTimer++;
+        }
+        // Whip attack — same as player
+        if (troubledPerson.attackTimer > 0) troubledPerson.attackTimer--;
+        if (tlen < 110 && troubledPerson.attackTimer === 0 && !troubledPerson.whip.active) {
+          troubledPerson.attackTimer = 30;
+          troubledPerson.whip.active = true;
+          troubledPerson.whip.timer = 20;
+          troubledPerson.whip.x = troubledPerson.x;
+          troubledPerson.whip.y = troubledPerson.y;
+          let wdir = 1 / tlen;
+          troubledPerson.whip.endX = troubledPerson.x + tdx * wdir * 90;
+          troubledPerson.whip.endY = troubledPerson.y + tdy * wdir * 90;
+          // Line-segment hit check against all quest wolves, same as player
+          for (const wolf of wolves) {
+            if (wolf.pack !== TROUBLED_PACK_ID) continue;
+            let wpx = troubledPerson.whip.endX - troubledPerson.whip.x;
+            let wpy = troubledPerson.whip.endY - troubledPerson.whip.y;
+            let len2 = wpx * wpx + wpy * wpy;
+            let t = Math.max(0, Math.min(1, ((wolf.x - troubledPerson.whip.x) * wpx + (wolf.y - troubledPerson.whip.y) * wpy) / len2));
+            let projX = troubledPerson.whip.x + t * wpx;
+            let projY = troubledPerson.whip.y + t * wpy;
+            let hd = Math.hypot(wolf.x - projX, wolf.y - projY);
+            if (hd < 25) {
+              wolf.health--;
+              let kbAngle = Math.atan2(wolf.y - troubledPerson.y, wolf.x - troubledPerson.x);
+              wolf.x += Math.cos(kbAngle) * 40;
+              wolf.y += Math.sin(kbAngle) * 40;
+              wolf.x = Math.max(BORDER, Math.min(WORLD_W - BORDER, wolf.x));
+              wolf.y = Math.max(BORDER, Math.min(WORLD_H - BORDER, wolf.y));
+              wolf.state = 'wander';
+              wolf.angle = kbAngle;
+            }
+          }
+        }
+      }
+      if (troubledPerson.whip.active) {
+        troubledPerson.whip.timer--;
+        if (troubledPerson.whip.timer <= 0) troubledPerson.whip.active = false;
+      }
+      // Check if all quest wolves defeated
+      let anyLeft = wolves.some(w => w.pack === TROUBLED_PACK_ID);
+      if (!anyLeft) {
+        troubledPersonFound = true;
+        troubledPerson.following = true;
+        notify('The miner is safe! Lead them to the mine.');
+      }
+    }
+  }
+
+  // Miner follows player to the mine
+  if (troubledPerson.active && troubledPerson.following && !mineFound) {
+    let fdx = player.x - troubledPerson.x;
+    let fdy = player.y - troubledPerson.y;
+    let fdist = Math.hypot(fdx, fdy);
+    troubledPerson.movingFollow = false;
+    if (fdist > 300) {
+      // Teleport close if too far behind
+      troubledPerson.x = player.x - (fdx / fdist) * 35;
+      troubledPerson.y = player.y - (fdy / fdist) * 35;
+    } else if (fdist > 40) {
+      let spd = player.speed * 0.9;
+      troubledPerson.x += (fdx / fdist) * spd;
+      troubledPerson.y += (fdy / fdist) * spd;
+      troubledPerson.movingFollow = true;
+      // Update facing
+      if (Math.abs(fdx) > Math.abs(fdy)) {
+        troubledPerson.facing = fdx > 0 ? 'right' : 'left';
+      } else {
+        troubledPerson.facing = fdy > 0 ? 'down' : 'up';
+      }
+    }
+    // Keep in bounds
+    troubledPerson.x = Math.max(BORDER, Math.min(WORLD_W - BORDER, troubledPerson.x));
+    troubledPerson.y = Math.max(BORDER, Math.min(WORLD_H - BORDER, troubledPerson.y));
+  }
 }
 
 // --- DRAW ---
@@ -2328,14 +2652,22 @@ function draw() {
     if (vp.hasQuest) {
       let quest = activeQuests.find(q => q.giver === vi);
       let bob = Math.sin(Date.now() / 300) * 2;
-      if (quest && quest.done && !quest.turned_in) {
+      let hasEnoughSupplies = false;
+      if (quest && quest.accepted && !quest.done && !quest.turned_in) {
+        let itemType = quest.type === 'gather_food' ? 'food' : quest.type === 'gather_medkit' ? 'medkit' : null;
+        if (itemType) {
+          let have = inventory.slots.filter(s => s === itemType).length;
+          hasEnoughSupplies = have >= (quest.need - quest.progress);
+        }
+      }
+      if (quest && (quest.done || hasEnoughSupplies) && !quest.turned_in) {
         // Ready to turn in - green "?"
         ctx.fillStyle = '#44ff44';
         ctx.font = 'bold 16px Arial';
         ctx.textAlign = 'center';
         ctx.fillText('?', vp.x, vp.y - 20 + bob);
-      } else if (quest && !quest.turned_in) {
-        // Has active quest - yellow "!"
+      } else if (quest && !quest.accepted && !quest.turned_in) {
+        // Has unaccepted quest - yellow "!"
         ctx.fillStyle = '#ffdd00';
         ctx.font = 'bold 16px Arial';
         ctx.textAlign = 'center';
@@ -2736,18 +3068,7 @@ function draw() {
   if (!inMainMenu) {
   // Crash sites
   for (const site of crashSites) {
-    if (site.rescued) {
-      // Empty crash site - just scorch marks remaining
-      ctx.fillStyle = 'rgba(40,30,10,0.4)';
-      ctx.beginPath();
-      ctx.ellipse(site.x, site.y + 5, 35, 14, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#aaa';
-      ctx.font = '10px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillText('rescued', site.x, site.y + 5);
-      continue;
-    }
+    if (site.rescued) continue;
 
     // Smoke
     for (const s of site.smoke) {
@@ -3012,6 +3333,109 @@ function draw() {
       : (target.y > f.y ? 'down' : 'up');
     drawBean(f.x, f.y, 16, f.color, fDir, false, f.moving);
   }
+  // Mine entrance
+  if (!mineFound) {
+    ctx.save();
+    ctx.translate(mine.x, mine.y);
+
+    // Rocky hillside / mound
+    ctx.fillStyle = '#5a5040';
+    ctx.beginPath();
+    ctx.moveTo(-40, 10);
+    ctx.quadraticCurveTo(-35, -30, 0, -38);
+    ctx.quadraticCurveTo(35, -30, 40, 10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#3a3530';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Rock texture
+    ctx.fillStyle = '#6a6050';
+    ctx.beginPath(); ctx.arc(-18, -15, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(15, -20, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(25, -5, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#4a4538';
+    ctx.beginPath(); ctx.arc(-25, -5, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(5, -28, 4, 0, Math.PI * 2); ctx.fill();
+
+    // Dark mine entrance (arch)
+    ctx.fillStyle = '#1a1008';
+    ctx.beginPath();
+    ctx.moveTo(-18, 10);
+    ctx.lineTo(-18, -8);
+    ctx.quadraticCurveTo(0, -22, 18, -8);
+    ctx.lineTo(18, 10);
+    ctx.closePath();
+    ctx.fill();
+
+    // Wooden support beams
+    ctx.strokeStyle = '#8a6a30';
+    ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(-18, 10); ctx.lineTo(-18, -8); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(18, 10); ctx.lineTo(18, -8); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-20, -8); ctx.quadraticCurveTo(0, -20, 20, -8); ctx.stroke();
+
+    // Pickaxe leaning against entrance
+    ctx.strokeStyle = '#7a5a20';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(24, 8); ctx.lineTo(32, -16); ctx.stroke();
+    ctx.fillStyle = '#888';
+    ctx.beginPath(); ctx.moveTo(28, -14); ctx.lineTo(36, -18); ctx.lineTo(34, -12); ctx.closePath(); ctx.fill();
+
+    // Ore sparkle (animated)
+    let sparkle = Math.sin(Date.now() / 400) * 0.5 + 0.5;
+    ctx.fillStyle = `rgba(255,215,0,${sparkle * 0.8})`;
+    ctx.beginPath(); ctx.arc(-8, -2, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(6, -5, 1.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, 2, 1.5, 0, Math.PI * 2); ctx.fill();
+
+    ctx.restore();
+
+    // Indicator above mine when quest is active
+    if (troubledPersonFound) {
+      let bob = Math.sin(Date.now() / 300) * 3;
+      ctx.fillStyle = '#ffdd00';
+      ctx.font = 'bold 14px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('?', mine.x, mine.y - 46 + bob);
+    }
+  } else {
+    // Discovered mine - darker, no indicator
+    ctx.save();
+    ctx.translate(mine.x, mine.y);
+    ctx.fillStyle = '#5a5040';
+    ctx.beginPath();
+    ctx.moveTo(-40, 10);
+    ctx.quadraticCurveTo(-35, -30, 0, -38);
+    ctx.quadraticCurveTo(35, -30, 40, 10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#3a3530';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = '#6a6050';
+    ctx.beginPath(); ctx.arc(-18, -15, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(15, -20, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(25, -5, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#1a1008';
+    ctx.beginPath();
+    ctx.moveTo(-18, 10); ctx.lineTo(-18, -8);
+    ctx.quadraticCurveTo(0, -22, 18, -8); ctx.lineTo(18, 10);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#8a6a30';
+    ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(-18, 10); ctx.lineTo(-18, -8); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(18, 10); ctx.lineTo(18, -8); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-20, -8); ctx.quadraticCurveTo(0, -20, 20, -8); ctx.stroke();
+    // Green checkmark
+    ctx.fillStyle = '#44ff44';
+    ctx.font = 'bold 14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('\u2713', 0, -46);
+    ctx.restore();
+  }
+
   } // end !inMainMenu crash/followers block
 
   // Draw item icon helper
@@ -3719,6 +4143,123 @@ function draw() {
   }
 
   if (!inMainMenu) {
+  // Troubled person NPC
+  if (troubledPerson.active) {
+    let tpMoving = (troubledPerson.found && wolves.some(w => w.pack === TROUBLED_PACK_ID)) || troubledPerson.movingFollow;
+    if (troubledPerson.hurtTimer > 0 && Math.floor(troubledPerson.hurtTimer / 4) % 2 === 0) {
+      ctx.globalAlpha = 0.4;
+    }
+    drawBean(troubledPerson.x, troubledPerson.y, 24, '#8a6040', troubledPerson.facing, false, tpMoving, true);
+    ctx.globalAlpha = 1;
+    // Health bar when in combat (not when following)
+    if (troubledPerson.found && !troubledPerson.following) {
+      let hbw = 30, hbh = 4;
+      let hbx = troubledPerson.x - hbw / 2, hby = troubledPerson.y - 26;
+      ctx.fillStyle = '#222';
+      ctx.fillRect(hbx, hby, hbw, hbh);
+      ctx.fillStyle = '#44cc44';
+      ctx.fillRect(hbx, hby, hbw * (troubledPerson.health / troubledPerson.maxHealth), hbh);
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(hbx, hby, hbw, hbh);
+    }
+    // "!" indicator when not yet found
+    if (!troubledPerson.found) {
+      ctx.fillStyle = '#ffdd44';
+      ctx.font = 'bold 18px Arial';
+      ctx.textAlign = 'center';
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 3;
+      ctx.strokeText('!', troubledPerson.x, troubledPerson.y - 30);
+      ctx.fillText('!', troubledPerson.x, troubledPerson.y - 30);
+    }
+    // Speech bubble
+    if (troubledPerson.speechTimer > 0 && troubledPerson.speechText) {
+      ctx.font = 'bold 18px Arial';
+      ctx.textAlign = 'left';
+      let sPad = 14;
+      let txt = troubledPerson.speechText;
+      let tw = ctx.measureText(txt).width;
+      let hint = isMobile ? 'Tap to continue' : 'Press Space to continue';
+      ctx.font = '11px Arial';
+      let hw = ctx.measureText(hint).width;
+      ctx.font = 'bold 18px Arial';
+      let bw = Math.max(tw, hw) + sPad * 2;
+      let bh = 50;
+      let bx = troubledPerson.x - bw / 2;
+      let by = troubledPerson.y - 78;
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(bx, by, bw, bh, 8);
+      ctx.fill();
+      ctx.stroke();
+      // Tail
+      ctx.beginPath();
+      ctx.moveTo(troubledPerson.x - 5, by + bh);
+      ctx.lineTo(troubledPerson.x, by + bh + 10);
+      ctx.lineTo(troubledPerson.x + 5, by + bh);
+      ctx.closePath();
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+      ctx.stroke();
+      // Cover seam
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(troubledPerson.x - 4, by + bh);
+      ctx.lineTo(troubledPerson.x + 4, by + bh);
+      ctx.stroke();
+      // Main text
+      ctx.fillStyle = '#000';
+      ctx.font = 'bold 18px Arial';
+      ctx.fillText(txt, bx + sPad, by + 24);
+      // Hint text
+      ctx.fillStyle = '#666';
+      ctx.font = '11px Arial';
+      ctx.fillText(hint, bx + sPad, by + 42);
+    }
+    // Pickaxe attack
+    if (troubledPerson.whip.active) {
+      let progress = 1 - (troubledPerson.whip.timer / 20);
+      let handX = troubledPerson.x, handY = troubledPerson.y;
+      if (troubledPerson.facing === 'right') { handX += 10; handY += 2; }
+      else if (troubledPerson.facing === 'left') { handX -= 10; handY += 2; }
+      else if (troubledPerson.facing === 'up') { handX += 6; handY -= 8; }
+      else if (troubledPerson.facing === 'down') { handX -= 6; handY += 8; }
+      let swingAngle = -Math.PI * 0.3 + progress * Math.PI * 0.6;
+      let dx = troubledPerson.whip.endX - troubledPerson.whip.x;
+      let dy = troubledPerson.whip.endY - troubledPerson.whip.y;
+      let baseAngle = Math.atan2(dy, dx);
+      let handleLen = 28;
+      let endX = handX + Math.cos(baseAngle + swingAngle - Math.PI * 0.3) * handleLen * Math.min(progress * 2, 1);
+      let endY = handY + Math.sin(baseAngle + swingAngle - Math.PI * 0.3) * handleLen * Math.min(progress * 2, 1);
+      // Handle
+      ctx.strokeStyle = '#7a5a20';
+      ctx.lineWidth = 3.5;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(handX, handY);
+      ctx.lineTo(endX, endY);
+      ctx.stroke();
+      // Pickaxe head
+      let headAngle = baseAngle + swingAngle - Math.PI * 0.3;
+      let perpX = Math.cos(headAngle + Math.PI / 2) * 8;
+      let perpY = Math.sin(headAngle + Math.PI / 2) * 8;
+      ctx.fillStyle = '#888';
+      ctx.beginPath();
+      ctx.moveTo(endX - perpX, endY - perpY);
+      ctx.lineTo(endX + Math.cos(headAngle) * 6, endY + Math.sin(headAngle) * 6);
+      ctx.lineTo(endX + perpX, endY + perpY);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#666';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+
   // Player
   let playerMoving = keys['ArrowLeft'] || keys['a'] || keys['A'] || keys['ArrowRight'] || keys['d'] || keys['D'] || keys['ArrowUp'] || keys['w'] || keys['W'] || keys['ArrowDown'] || keys['s'] || keys['S'] || touchJoystick.active;
   // Flash when hurt
@@ -3787,36 +4328,45 @@ function draw() {
   if (inMainMenu) return;
 
   // Minimap
-  let mmW = 140, mmH = 140;
-  let mmX = canvas.width - mmW - 10, mmY = canvas.height - mmH - 30;
-  ctx.fillStyle = 'rgba(0,30,0,0.7)';
-  ctx.fillRect(mmX, mmY, mmW, mmH);
-  ctx.strokeStyle = '#4a4';
-  ctx.strokeRect(mmX, mmY, mmW, mmH);
+  let mmCtx, mmW, mmH, mmX, mmY;
+  if (isMobile) {
+    mmCtx = minimapCtx;
+    mmW = minimapCanvas.width; mmH = minimapCanvas.height;
+    mmX = 0; mmY = 0;
+    mmCtx.clearRect(0, 0, mmW, mmH);
+  } else {
+    mmCtx = ctx;
+    mmW = 140; mmH = 140;
+    mmX = canvas.width - mmW - 10; mmY = canvas.height - mmH - 30;
+  }
+  mmCtx.fillStyle = 'rgba(0,30,0,0.7)';
+  mmCtx.fillRect(mmX, mmY, mmW, mmH);
+  mmCtx.strokeStyle = '#4a4';
+  mmCtx.strokeRect(mmX, mmY, mmW, mmH);
 
   // Rivers on minimap
-  ctx.strokeStyle = '#1a6aaa';
-  ctx.lineWidth = 2;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
+  mmCtx.strokeStyle = '#1a6aaa';
+  mmCtx.lineWidth = 2;
+  mmCtx.lineCap = 'round';
+  mmCtx.lineJoin = 'round';
   for (const river of rivers) {
-    ctx.beginPath();
-    ctx.moveTo(mmX + (river[0].x / WORLD_W) * mmW, mmY + (river[0].y / WORLD_H) * mmH);
+    mmCtx.beginPath();
+    mmCtx.moveTo(mmX + (river[0].x / WORLD_W) * mmW, mmY + (river[0].y / WORLD_H) * mmH);
     for (let i = 1; i < river.length; i++) {
-      ctx.lineTo(mmX + (river[i].x / WORLD_W) * mmW, mmY + (river[i].y / WORLD_H) * mmH);
+      mmCtx.lineTo(mmX + (river[i].x / WORLD_W) * mmW, mmY + (river[i].y / WORLD_H) * mmH);
     }
-    ctx.stroke();
+    mmCtx.stroke();
   }
 
   // Bridges on minimap
-  ctx.fillStyle = '#9a7a4a';
+  mmCtx.fillStyle = '#9a7a4a';
   for (const br of bridges) {
-    ctx.fillRect(mmX + (br.x / WORLD_W) * mmW - 2, mmY + (br.y / WORLD_H) * mmH - 2, 5, 5);
+    mmCtx.fillRect(mmX + (br.x / WORLD_W) * mmW - 2, mmY + (br.y / WORLD_H) * mmH - 2, 5, 5);
   }
 
   // Village on minimap
-  ctx.fillStyle = 'rgba(80,180,60,0.5)';
-  ctx.fillRect(
+  mmCtx.fillStyle = 'rgba(80,180,60,0.5)';
+  mmCtx.fillRect(
     mmX + (village.x / WORLD_W) * mmW,
     mmY + (village.y / WORLD_H) * mmH,
     (village.w / WORLD_W) * mmW,
@@ -3825,29 +4375,37 @@ function draw() {
 
   // Crash sites on minimap (only unrescued visible if scout assigned)
   for (const site of crashSites) {
-    if (site.rescued) {
-      ctx.fillStyle = '#555';
-      ctx.fillRect(mmX + (site.x / WORLD_W) * mmW - 2, mmY + (site.y / WORLD_H) * mmH - 2, 4, 4);
-    } else if (watchtowerJobs.scout.assigned > 0) {
+    if (site.rescued) continue;
+    if (watchtowerJobs.scout.assigned > 0) {
       // Scout reveals with blinking SOS
-      ctx.fillStyle = Math.sin(Date.now() / 300) > 0 ? '#ff4' : '#f44';
-      ctx.fillRect(mmX + (site.x / WORLD_W) * mmW - 3, mmY + (site.y / WORLD_H) * mmH - 3, 6, 6);
+      mmCtx.fillStyle = Math.sin(Date.now() / 300) > 0 ? '#ff4' : '#f44';
+      mmCtx.fillRect(mmX + (site.x / WORLD_W) * mmW - 3, mmY + (site.y / WORLD_H) * mmH - 3, 6, 6);
     }
   }
 
   // Wolves on minimap (if lookout assigned)
   if (watchtowerJobs.lookout.assigned > 0) {
     for (const wolf of wolves) {
-      ctx.fillStyle = wolf.state === 'chase' ? '#ff4444' : '#ffdd44';
-      ctx.beginPath();
-      ctx.arc(mmX + (wolf.x / WORLD_W) * mmW, mmY + (wolf.y / WORLD_H) * mmH, 2, 0, Math.PI * 2);
-      ctx.fill();
+      mmCtx.fillStyle = wolf.state === 'chase' ? '#ff4444' : '#ffdd44';
+      mmCtx.beginPath();
+      mmCtx.arc(mmX + (wolf.x / WORLD_W) * mmW, mmY + (wolf.y / WORLD_H) * mmH, 2, 0, Math.PI * 2);
+      mmCtx.fill();
     }
   }
 
+  // Mine on minimap (visible once quest is active)
+  if (troubledPersonFound && !mineFound) {
+    let mSparkle = Math.sin(Date.now() / 400) > 0 ? '#ffdd00' : '#aa8800';
+    mmCtx.fillStyle = mSparkle;
+    mmCtx.fillRect(mmX + (mine.x / WORLD_W) * mmW - 3, mmY + (mine.y / WORLD_H) * mmH - 3, 6, 6);
+  } else if (mineFound) {
+    mmCtx.fillStyle = '#44ff44';
+    mmCtx.fillRect(mmX + (mine.x / WORLD_W) * mmW - 2, mmY + (mine.y / WORLD_H) * mmH - 2, 4, 4);
+  }
+
   // Player on minimap
-  ctx.fillStyle = '#ff0';
-  ctx.fillRect(mmX + (player.x / WORLD_W) * mmW - 3, mmY + (player.y / WORLD_H) * mmH - 3, 6, 6);
+  mmCtx.fillStyle = '#ff0';
+  mmCtx.fillRect(mmX + (player.x / WORLD_W) * mmW - 3, mmY + (player.y / WORLD_H) * mmH - 3, 6, 6);
 
   // Notification
   if (notifyTimer > 0) {
@@ -3948,7 +4506,7 @@ function draw() {
   }
 
   // Quest tracker button + panel
-  let visibleQuests = activeQuests.filter(q => !q.turned_in);
+  let visibleQuests = activeQuests.filter(q => q.accepted && !q.turned_in);
   {
     let qx = 6, qy = 34;
     let btnW = 90, btnH = 22;
@@ -4042,17 +4600,33 @@ function draw() {
         ctx.textAlign = 'right';
         ctx.fillText(`${rescued}/${totalSurvivors}`, panelX + panelW - 6, curY + 10);
         curY += 18;
-      } else {
+      } else if (!sideDone) {
         // After rescue quest done, show side quest goal
-        ctx.fillStyle = sideDone ? '#44ff44' : '#f0e8d0';
+        ctx.fillStyle = '#f0e8d0';
         ctx.font = '10px Arial';
         ctx.textAlign = 'left';
-        ctx.fillText(sideDone ? '\u2713' : '\u2022', panelX + 6, curY + 10);
+        ctx.fillText('\u2022', panelX + 6, curY + 10);
         ctx.fillText('Complete 3 side quests', panelX + 18, curY + 10);
-        ctx.fillStyle = sideDone ? '#44ff44' : '#ffdd44';
+        ctx.fillStyle = '#ffdd44';
         ctx.font = 'bold 10px Arial';
         ctx.textAlign = 'right';
         ctx.fillText(`${Math.min(completedSideQuests, sideGoal)}/${sideGoal}`, panelX + panelW - 6, curY + 10);
+        curY += 18;
+      } else if (!troubledPersonFound) {
+        // After both rescue & side quests done, show Find the troubled person
+        ctx.fillStyle = '#f0e8d0';
+        ctx.font = '10px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText('\u2022', panelX + 6, curY + 10);
+        ctx.fillText('Find the troubled person', panelX + 18, curY + 10);
+        curY += 18;
+      } else {
+        // After troubled person found, show Find the Mine
+        ctx.fillStyle = mineFound ? '#44ff44' : '#f0e8d0';
+        ctx.font = '10px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText(mineFound ? '\u2713' : '\u2022', panelX + 6, curY + 10);
+        ctx.fillText('Find the Mine', panelX + 18, curY + 10);
         curY += 18;
       }
 
@@ -4109,10 +4683,66 @@ function draw() {
     ctx.fillText(`Following: ${followers.length} survivor${followers.length > 1 ? 's' : ''} → Village`, 18, canvas.height - 22);
   }
 
-  // Win check - requires BOTH main quests complete
+  // Second main quest completion: HELP yell scrolls across screen
+  let _sideQuestsCompletedCount = activeQuests.filter(q => q.turned_in).length;
+  if (_sideQuestsCompletedCount >= 3 && !helpYellTriggered) {
+    helpYellTriggered = true;
+    helpYellActive = true;
+    helpYellX = -700;
+  }
+  if (helpYellActive) {
+    ctx.save();
+    let yellText = 'HEEEEEEEELP!!!';
+    ctx.font = 'bold 64px Arial';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    let padX = 26, padY = 18;
+    let textW = ctx.measureText(yellText).width;
+    let bubW = textW + padX * 2;
+    let bubH = 64 + padY * 2;
+    let bubX = helpYellX;
+    let bubY = canvas.height / 2 - bubH / 2;
+    // Bubble body
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.roundRect(bubX, bubY, bubW, bubH, 22);
+    ctx.fill();
+    ctx.stroke();
+    // Bubble tail (pointing down-left)
+    ctx.beginPath();
+    ctx.moveTo(bubX + 40, bubY + bubH - 1);
+    ctx.lineTo(bubX + 22, bubY + bubH + 28);
+    ctx.lineTo(bubX + 70, bubY + bubH - 1);
+    ctx.closePath();
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+    ctx.stroke();
+    // Cover the seam where tail meets bubble
+    ctx.beginPath();
+    ctx.moveTo(bubX + 41, bubY + bubH);
+    ctx.lineTo(bubX + 69, bubY + bubH);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 5;
+    ctx.stroke();
+    // Text
+    ctx.fillStyle = '#d00000';
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 3;
+    let txX = bubX + padX;
+    let txY = bubY + bubH / 2;
+    ctx.strokeText(yellText, txX, txY);
+    ctx.fillText(yellText, txX, txY);
+    ctx.restore();
+    if (!paused) helpYellX += 6;
+    if (helpYellX > canvas.width + 50) helpYellActive = false;
+  }
+
+  // Win check - requires all main quests complete
   let _rescuedAll = village.population >= totalSurvivors && totalSurvivors > 0;
   let _sideQuestsDone = activeQuests.filter(q => q.turned_in).length >= 3;
-  if (_rescuedAll && _sideQuestsDone) {
+  if (_rescuedAll && _sideQuestsDone && troubledPersonFound && mineFound) {
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(canvas.width/2 - 200, canvas.height/2 - 30, 400, 60);
     ctx.fillStyle = '#ffdd00';
@@ -4222,7 +4852,10 @@ function draw() {
       let btnY = menuY + menuH - 40;
       let btnLabel = '';
       let btnColor = '#444';
-      if (quest.done && !quest.turned_in) {
+      if (!quest.accepted) {
+        btnLabel = 'Accept';
+        btnColor = '#3388cc';
+      } else if (quest.done && !quest.turned_in) {
         btnLabel = 'Turn In';
         btnColor = '#44aa44';
       } else if (quest.type === 'gather_food' || quest.type === 'gather_medkit') {
@@ -4371,9 +5004,14 @@ function saveGame() {
     speedBoostTimer: speedBoostTimer,
     shieldActive: shieldActive,
     watchtowerJobs: { lookout: watchtowerJobs.lookout.assigned, scout: watchtowerJobs.scout.assigned, archer: watchtowerJobs.archer.assigned },
-    activeQuests: activeQuests.map(q => ({ id: q.id, giver: q.giver, desc: q.desc, type: q.type, need: q.need, progress: q.progress, reward: q.reward, done: q.done, turned_in: q.turned_in })),
+    activeQuests: activeQuests.map(q => ({ id: q.id, giver: q.giver, desc: q.desc, type: q.type, need: q.need, progress: q.progress, reward: q.reward, done: q.done, turned_in: q.turned_in, accepted: q.accepted })),
     wolfKillCount: wolfKillCount,
-    questIdCounter: questIdCounter
+    questIdCounter: questIdCounter,
+    helpYellTriggered: helpYellTriggered,
+    troubledPersonFound: troubledPersonFound,
+    troubledPerson: { active: troubledPerson.active, found: troubledPerson.found, following: troubledPerson.following, wolvesSpawned: troubledPerson.wolvesSpawned, x: troubledPerson.x, y: troubledPerson.y },
+    mineFound: mineFound,
+    mine: { x: mine.x, y: mine.y }
   };
   localStorage.setItem('jungleRescueSave', JSON.stringify(save));
   notify('Game saved!');
@@ -4424,11 +5062,41 @@ function loadGame() {
     if (save.activeQuests) {
       activeQuests.length = 0;
       for (const q of save.activeQuests) {
-        activeQuests.push({ id: q.id, giver: q.giver, desc: q.desc, type: q.type, need: q.need, progress: q.progress, reward: q.reward, done: q.done, turned_in: q.turned_in });
+        activeQuests.push({ id: q.id, giver: q.giver, desc: q.desc, type: q.type, need: q.need, progress: q.progress, reward: q.reward, done: q.done, turned_in: q.turned_in, accepted: q.accepted || false });
       }
       wolfKillCount = save.wolfKillCount || 0;
       questIdCounter = save.questIdCounter || 0;
     }
+    helpYellTriggered = save.helpYellTriggered || false;
+    helpYellActive = false;
+    troubledPersonFound = save.troubledPersonFound || false;
+    mineFound = save.mineFound || false;
+    if (save.mine) {
+      mine.x = save.mine.x;
+      mine.y = save.mine.y;
+    }
+    if (save.troubledPerson) {
+      troubledPerson.active = save.troubledPerson.active || false;
+      troubledPerson.found = save.troubledPerson.found || false;
+      troubledPerson.following = save.troubledPerson.following || false;
+      troubledPerson.wolvesSpawned = save.troubledPerson.wolvesSpawned || false;
+      troubledPerson.x = save.troubledPerson.x || 320;
+      troubledPerson.y = save.troubledPerson.y || 320;
+    } else {
+      troubledPerson.active = false;
+      troubledPerson.found = false;
+      troubledPerson.following = false;
+      troubledPerson.wolvesSpawned = false;
+    }
+    troubledPerson.whip.active = false;
+    troubledPerson.attackTimer = 0;
+    troubledPerson.health = troubledPerson.maxHealth;
+    troubledPerson.hurtTimer = 0;
+    troubledPerson.invincible = 0;
+    troubledPerson.speechText = '';
+    troubledPerson.speechTimer = 0;
+    troubledPerson.speechPhase = 0;
+    troubledPerson.speechWaiting = false;
     followers.length = 0;
     player.carrying = 0;
     document.getElementById('rescued').textContent =
@@ -4544,6 +5212,7 @@ function drawMainMenu() {
     tipCycleNum = Math.floor(menuAnimTimer / pairLength) * 2 + 1;
   }
   let tipIndex = Math.floor(tipCycleNum / 2) % menuTips.length;
+  if (isMobile) showingTip = false;
 
   // Random action system
   if (!drawMainMenu._action) {
@@ -4889,6 +5558,21 @@ const pauseOverlay = document.getElementById('pause-overlay');
 
 pauseBtn.addEventListener('click', togglePause);
 window.addEventListener('keydown', e => {
+  // Advance NPC speech bubble on space
+  if (e.key === ' ' && troubledPerson.speechWaiting && troubledPerson.speechTimer > 0) {
+    troubledPerson.speechWaiting = false;
+    if (troubledPerson.speechPhase === 1) {
+      troubledPerson.speechText = "I'll hold them off with my pickaxe!";
+      troubledPerson.speechTimer = 9999;
+      troubledPerson.speechWaiting = true;
+      troubledPerson.speechPhase = 2;
+    } else {
+      troubledPerson.speechText = '';
+      troubledPerson.speechTimer = 0;
+      troubledPerson.speechPhase = 0;
+    }
+    return;
+  }
   if (e.key === 'Escape' && document.fullscreenElement) {
     document.exitFullscreen();
   } else if (e.key === 'p' || e.key === 'P') togglePause();
@@ -4949,6 +5633,27 @@ function resetNewGame() {
   activeQuests.length = 0;
   questIdCounter = 0;
   wolfKillCount = 0;
+  helpYellTriggered = false;
+  helpYellActive = false;
+  troubledPersonFound = false;
+  mineFound = false;
+  troubledPerson.active = false;
+  troubledPerson.found = false;
+  troubledPerson.following = false;
+  troubledPerson.movingFollow = false;
+  troubledPerson.wolvesSpawned = false;
+  troubledPerson.x = 320;
+  troubledPerson.y = 320;
+  troubledPerson.facing = 'down';
+  troubledPerson.whip.active = false;
+  troubledPerson.attackTimer = 0;
+  troubledPerson.health = troubledPerson.maxHealth;
+  troubledPerson.hurtTimer = 0;
+  troubledPerson.invincible = 0;
+  troubledPerson.speechText = '';
+  troubledPerson.speechTimer = 0;
+  troubledPerson.speechPhase = 0;
+  troubledPerson.speechWaiting = false;
   questMenuOpen = false;
   questMenuTarget = -1;
   // Reset inventory
@@ -4982,8 +5687,12 @@ function togglePause() {
 // --- MOBILE TOUCH CONTROLS ---
 const isMobile = ('ontouchstart' in window) && window.matchMedia('(pointer: coarse)').matches;
 let touchJoystick = { active: false, dx: 0, dy: 0 };
+const minimapCanvas = document.getElementById('minimap-canvas');
+const minimapCtx = minimapCanvas.getContext('2d');
 
 if (isMobile) {
+  // Stack save button label on two lines to fit in left bar
+  document.getElementById('save-btn').innerHTML = 'Save<br>&amp; Quit';
   // Lock orientation if supported
   if (screen.orientation && screen.orientation.lock) {
     screen.orientation.lock('landscape').catch(() => {});
