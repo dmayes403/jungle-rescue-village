@@ -106,6 +106,10 @@
 <button id="pause-btn" class="game-btn icon-btn" title="Pause" style="display:none"><span class="pause-icon"><span></span><span></span></span></button>
 <button id="fs-btn" class="game-btn icon-btn" title="Fullscreen" style="display:none"><span class="fs-icon"><span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span></span></button>
 <button id="save-btn" class="game-btn" style="display:none">Save & Quit</button>
+<div id="debug-panel" style="display:none;position:absolute;top:10px;left:10px;z-index:999;background:rgba(0,0,0,0.85);border:2px solid #ffaa00;border-radius:8px;padding:12px;color:#fff;font:13px monospace;min-width:220px;pointer-events:auto;">
+  <div style="color:#ffaa00;font-weight:bold;font-size:14px;margin-bottom:8px;border-bottom:1px solid #555;padding-bottom:4px;">DEBUG - Quest Skip <span id="debug-close" style="float:right;cursor:pointer;color:#888;">[`]</span></div>
+  <div id="debug-quests"></div>
+</div>
 <div id="pause-overlay"><span id="pause-text">PAUSED</span></div>
 <canvas id="game"></canvas>
 </div>
@@ -492,7 +496,8 @@ do {
   mineX = BORDER + 100 + Math.random() * (WORLD_W - BORDER * 2 - 200);
   mineY = BORDER + 100 + Math.random() * (WORLD_H - BORDER * 2 - 200);
 } while ((Math.abs(mineX - WORLD_W/2) < 400 && Math.abs(mineY - WORLD_H/2) < 400) ||
-  nearRiver(mineX, mineY, RIVER_WIDTH + 30));
+  nearRiver(mineX, mineY, RIVER_WIDTH + 30) ||
+  crashSites.some(s => Math.hypot(s.x - mineX, s.y - mineY) < 120));
 const mine = { x: mineX, y: mineY };
 
 // Clear trees near the mine
@@ -1356,18 +1361,18 @@ function update() {
       mineScene.phase = 'boss';
       mineScene.fadeIn = 40;
       // Position player and miner inside the mine arena
-      player.x = mine.x - 30;
-      player.y = mine.y + 20;
+      player.x = mine.x - 70;
+      player.y = mine.y + 140;
       player.facing = 'up';
-      troubledPerson.x = mine.x + 30;
-      troubledPerson.y = mine.y + 20;
+      troubledPerson.x = mine.x + 70;
+      troubledPerson.y = mine.y + 140;
       troubledPerson.facing = 'up';
       troubledPerson.following = false;
       troubledPerson.movingFollow = false;
       troubledPerson.health = troubledPerson.maxHealth;
       // Spawn boss wolf
       bossWolf = {
-        x: mine.x, y: mine.y - 30,
+        x: mine.x, y: mine.y - 140,
         angle: Math.PI, speed: 1.0,
         state: 'chase', attackTimer: 0,
         facing: 'down',
@@ -1387,7 +1392,7 @@ function update() {
   // Boss fight - confine player and miner to mine area, miner AI fights boss
   if (mineScene.active && mineScene.phase === 'boss') {
     if (mineScene.fadeIn > 0) mineScene.fadeIn--;
-    let arenaR = 70;
+    let arenaR = 250;
     // Confine player
     let pdx = player.x - mine.x, pdy = player.y - mine.y;
     let pdist = Math.hypot(pdx, pdy);
@@ -4385,6 +4390,26 @@ function draw() {
     drawItemIcon(item.x, item.y + bob, item.type, 12);
   }
 
+  // Mine boss arena - draw cave floor BEFORE characters so they appear on top
+  if (mineScene.active && (mineScene.phase === 'boss' || mineScene.phase === 'victory')) {
+    let arenaR = 250;
+    let arenaSX = mine.x - camX;
+    let arenaSY = mine.y - camY;
+    // Cave floor texture inside arena
+    ctx.fillStyle = '#2a2218';
+    ctx.beginPath();
+    ctx.arc(arenaSX, arenaSY, arenaR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#322a1e';
+    ctx.beginPath();
+    ctx.arc(arenaSX - 15, arenaSY + 8, arenaR * 0.7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#2e261c';
+    ctx.beginPath();
+    ctx.arc(arenaSX + 20, arenaSY - 10, arenaR * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
   // Wolves
   for (const wolf of wolves) {
     // Detection range circle
@@ -4406,7 +4431,7 @@ function draw() {
     ctx.setLineDash([]);
     } // end !inMainMenu detection circle
 
-    let s = wolf.pack === BOSS_PACK_ID ? 38 : wolf.isAlpha ? 28 : 22;
+    let s = wolf.pack === BOSS_PACK_ID ? 48 : wolf.isAlpha ? 28 : 22;
     ctx.save();
     ctx.translate(wolf.x, wolf.y);
     let flip = wolf.facing === 'left' ? -1 : 1;
@@ -5299,18 +5324,17 @@ function draw() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
 
-  // Mine boss arena overlay - dark cave walls around the fight area
+  // Mine boss arena overlay - dark cave walls around the fight area (drawn AFTER characters)
   if (mineScene.active && (mineScene.phase === 'boss' || mineScene.phase === 'victory')) {
     ctx.save();
-    // Dark cave overlay - everything outside the arena
-    let arenaR = 70;
+    let arenaR = 250;
     let arenaSX = mine.x - camX;
     let arenaSY = mine.y - camY;
 
     // Fade in from black
     let fadeAlpha = mineScene.fadeIn > 0 ? mineScene.fadeIn / 40 : 0;
 
-    // Dark surrounding
+    // Dark surrounding - everything outside the arena
     ctx.fillStyle = '#0a0804';
     ctx.beginPath();
     ctx.rect(0, 0, canvas.width, canvas.height);
@@ -5319,36 +5343,26 @@ function draw() {
 
     // Rocky cave wall ring
     ctx.strokeStyle = '#3a3028';
-    ctx.lineWidth = 25;
+    ctx.lineWidth = 30;
     ctx.beginPath();
     ctx.arc(arenaSX, arenaSY, arenaR + 8, 0, Math.PI * 2);
     ctx.stroke();
     ctx.strokeStyle = '#4a4030';
-    ctx.lineWidth = 8;
+    ctx.lineWidth = 10;
     ctx.beginPath();
-    ctx.arc(arenaSX, arenaSY, arenaR + 18, 0, Math.PI * 2);
+    ctx.arc(arenaSX, arenaSY, arenaR + 20, 0, Math.PI * 2);
     ctx.stroke();
-
-    // Cave floor texture inside arena
-    ctx.fillStyle = '#2a2218';
-    ctx.beginPath();
-    ctx.arc(arenaSX, arenaSY, arenaR, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#322a1e';
-    ctx.beginPath();
-    ctx.arc(arenaSX - 10, arenaSY + 5, arenaR * 0.7, 0, Math.PI * 2);
-    ctx.fill();
 
     // Gold veins on cave walls
     let t = Date.now();
-    for (let i = 0; i < 8; i++) {
-      let ang = (i / 8) * Math.PI * 2 + 0.3;
+    for (let i = 0; i < 16; i++) {
+      let ang = (i / 16) * Math.PI * 2 + 0.3;
       let gx = arenaSX + Math.cos(ang) * (arenaR + 5);
       let gy = arenaSY + Math.sin(ang) * (arenaR + 5);
       let sparkle = Math.sin(t / 400 + i * 1.2) * 0.4 + 0.4;
       ctx.fillStyle = `rgba(200,170,50,${sparkle * 0.6})`;
       ctx.beginPath();
-      ctx.arc(gx, gy, 2 + sparkle, 0, Math.PI * 2);
+      ctx.arc(gx, gy, 3 + sparkle * 2, 0, Math.PI * 2);
       ctx.fill();
     }
 
@@ -5442,15 +5456,15 @@ function draw() {
 
     // "BOSS" label
     if (bossWolf && bossWolf.health > 0) {
-      // Boss health bar at top
-      let bhbW = 140, bhbH = 10;
-      let bhbX = arenaSX - bhbW / 2, bhbY = arenaSY - arenaR - 40;
+      // Boss health bar at top of screen
+      let bhbW = 200, bhbH = 14;
+      let bhbX = canvas.width / 2 - bhbW / 2, bhbY = 30;
       ctx.fillStyle = 'rgba(0,0,0,0.7)';
-      ctx.fillRect(bhbX - 4, bhbY - 16, bhbW + 8, bhbH + 20);
+      ctx.fillRect(bhbX - 4, bhbY - 20, bhbW + 8, bhbH + 26);
       ctx.fillStyle = '#cc3333';
-      ctx.font = 'bold 10px Arial';
+      ctx.font = 'bold 12px Arial';
       ctx.textAlign = 'center';
-      ctx.fillText('ALPHA WOLF', arenaSX, bhbY - 4);
+      ctx.fillText('ALPHA WOLF', canvas.width / 2, bhbY - 6);
       ctx.fillStyle = '#333';
       ctx.fillRect(bhbX, bhbY, bhbW, bhbH);
       let bossPct = bossWolf.health / bossWolf.maxHealth;
@@ -6696,6 +6710,134 @@ function gameLoop() {
 }
 
 gameLoop();
+
+// --- DEBUG PANEL ---
+const debugPanel = document.getElementById('debug-panel');
+const debugQuests = document.getElementById('debug-quests');
+let debugOpen = false;
+
+function toggleDebug() {
+  debugOpen = !debugOpen;
+  debugPanel.style.display = debugOpen ? 'block' : 'none';
+  if (debugOpen) updateDebugPanel();
+}
+
+document.getElementById('debug-close').addEventListener('click', toggleDebug);
+window.addEventListener('keydown', e => {
+  if (e.key === '`') toggleDebug();
+});
+
+function updateDebugPanel() {
+  if (!debugOpen) return;
+  let rescued = village.population;
+  let sideComplete = activeQuests.filter(q => q.turned_in).length;
+  let quests = [
+    {
+      name: '1. Rescue All Survivors',
+      done: rescued >= totalSurvivors && totalSurvivors > 0,
+      status: `${rescued}/${totalSurvivors}`,
+      action: () => {
+        for (const site of crashSites) {
+          if (!site.rescued) {
+            site.rescued = true;
+            village.population += site.survivors;
+          }
+        }
+        followers.length = 0;
+        player.carrying = 0;
+        document.getElementById('rescued').textContent = totalSurvivors;
+        document.getElementById('village').textContent = village.population;
+        // Spawn village people for quest givers
+        while (villagePeople.length < village.population) {
+          villagePeople.push({
+            x: village.x + 20 + Math.random() * (village.w - 40),
+            y: village.y + 20 + Math.random() * (village.h - 40),
+            color: ['#c51111','#132ed1','#117f2d','#ed54ba','#ef7d0e','#f5f557'][Math.floor(Math.random()*6)],
+            wanderAngle: Math.random() * Math.PI * 2,
+            hasQuest: false
+          });
+        }
+      }
+    },
+    {
+      name: '2. Complete 3 Side Quests',
+      done: sideComplete >= 3,
+      status: `${Math.min(sideComplete, 3)}/3`,
+      action: () => {
+        // First ensure survivors are rescued
+        quests[0].action();
+        // Create and auto-complete 3 side quests if needed
+        let needed = 3 - activeQuests.filter(q => q.turned_in).length;
+        for (let i = 0; i < needed; i++) {
+          activeQuests.push({
+            id: questIdCounter++, giver: 0,
+            desc: 'Debug quest ' + (i+1), type: 'kill_wolves',
+            need: 1, progress: 1, reward: 'food',
+            done: true, turned_in: true, accepted: true
+          });
+        }
+      }
+    },
+    {
+      name: '3. Find the Miner (Wolf Fight)',
+      done: troubledPersonFound,
+      status: troubledPersonFound ? 'Done' : troubledPerson.active ? 'Active' : 'Locked',
+      action: () => {
+        quests[1].action(); // complete prerequisites
+        troubledPersonFound = true;
+        troubledPerson.active = true;
+        troubledPerson.found = true;
+        troubledPerson.following = true;
+        troubledPerson.movingFollow = false;
+        troubledPerson.health = troubledPerson.maxHealth;
+        troubledPerson.wolvesSpawned = true;
+        troubledPerson.x = player.x + 40;
+        troubledPerson.y = player.y;
+        // Remove any quest wolves
+        for (let i = wolves.length - 1; i >= 0; i--) {
+          if (wolves[i].pack === TROUBLED_PACK_ID) wolves.splice(i, 1);
+        }
+      }
+    },
+    {
+      name: '4. Find the Mine (Boss Fight)',
+      done: mineFound,
+      status: mineFound ? 'Done' : troubledPersonFound ? 'Active' : 'Locked',
+      action: () => {
+        quests[2].action(); // complete prerequisites
+        // Teleport player and miner near the mine
+        player.x = mine.x + 60;
+        player.y = mine.y + 60;
+        troubledPerson.x = mine.x - 60;
+        troubledPerson.y = mine.y + 60;
+        troubledPerson.active = true;
+        troubledPerson.following = true;
+      }
+    }
+  ];
+
+  debugQuests.innerHTML = quests.map((q, i) => {
+    let color = q.done ? '#44ff44' : '#f0e0b0';
+    let icon = q.done ? '✓' : '▶';
+    let btnStyle = q.done
+      ? 'background:#333;color:#666;cursor:default;'
+      : 'background:#4a3a10;color:#ffcc44;cursor:pointer;border:1px solid #886a20;';
+    return `<div style="margin-bottom:6px;">
+      <span style="color:${color};font-size:12px;">${q.done ? '✓' : '•'} ${q.name}</span>
+      <span style="color:#aaa;font-size:11px;float:right;">${q.status}</span>
+      <br><button onclick="window._debugSkip(${i})" style="${btnStyle}padding:3px 10px;border-radius:4px;font:11px monospace;margin-top:2px;width:100%;">${q.done ? 'Completed' : icon + ' Skip to this quest'}</button>
+    </div>`;
+  }).join('');
+
+  window._debugSkip = function(idx) {
+    if (quests[idx].done) return;
+    quests[idx].action();
+    updateDebugPanel();
+    notify('DEBUG: Skipped to ' + quests[idx].name);
+  };
+}
+
+setInterval(updateDebugPanel, 500);
 </script>
 </body>
 </html>
