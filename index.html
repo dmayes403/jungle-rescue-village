@@ -2287,11 +2287,20 @@ function update() {
 
 // --- DRAW ---
 function draw() {
-  // Jungle background
-  ctx.fillStyle = '#1a4d0a';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  let _inBossFight = mineScene.active && (mineScene.phase === 'boss' || mineScene.phase === 'victory' || mineScene.phase === 'victory_fade');
+  let _hideTrees = _inBossFight;
 
-  // Grass variation
+  // Jungle background (cave floor during boss fight)
+  if (_inBossFight) {
+    ctx.fillStyle = '#1a1610';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  } else {
+    ctx.fillStyle = '#1a4d0a';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  // Grass variation (hidden during boss fight)
+  if (!_inBossFight) {
   ctx.fillStyle = '#1e5a0e';
   for (let gx = -camX % 50; gx < canvas.width; gx += 50) {
     for (let gy = -camY % 50; gy < canvas.height; gy += 50) {
@@ -2300,6 +2309,7 @@ function draw() {
       }
     }
   }
+  } // end grass boss fight hide
 
 
 
@@ -2307,14 +2317,17 @@ function draw() {
   ctx.translate(-camX, -camY);
 
   // Dense border forest - extends far beyond map edges so it looks infinite
+  if (!_inBossFight) {
   ctx.fillStyle = '#0e3506';
   let ext = 2000; // extension beyond map
   ctx.fillRect(-ext, -ext, WORLD_W + ext * 2, BORDER + ext); // top
   ctx.fillRect(-ext, WORLD_H - BORDER, WORLD_W + ext * 2, BORDER + ext); // bottom
   ctx.fillRect(-ext, -ext, BORDER + ext, WORLD_H + ext * 2); // left
   ctx.fillRect(WORLD_W - BORDER, -ext, BORDER + ext, WORLD_H + ext * 2); // right
+  }
 
-  // Border trees - dense packed canopies
+  // Border trees - dense packed canopies (hidden during boss fight)
+  if (!_hideTrees)
   for (const bt of borderTrees) {
     // Trunk
     ctx.fillStyle = '#3a2510';
@@ -2357,7 +2370,8 @@ function draw() {
   ctx.fillStyle = grd;
   ctx.fillRect(WORLD_W - BORDER - 30, 0, 40, WORLD_H);
 
-  // Rivers
+  // Rivers (hidden during boss fight)
+  if (!_inBossFight)
   for (const river of rivers) {
     if (river.length < 2) continue;
 
@@ -2419,7 +2433,8 @@ function draw() {
     }
   }
 
-  // Bridges
+  // Bridges (hidden during boss fight)
+  if (!_inBossFight)
   for (const br of bridges) {
     ctx.save();
     ctx.translate(br.x, br.y);
@@ -2475,7 +2490,7 @@ function draw() {
     ctx.restore();
   }
 
-  if (!inMainMenu) {
+  if (!inMainMenu && !_inBossFight) {
   // Village area
   ctx.fillStyle = 'rgba(80, 180, 60, 0.3)';
   ctx.fillRect(village.x, village.y, village.w, village.h);
@@ -3040,7 +3055,8 @@ function draw() {
 
   } // end !inMainMenu village block
 
-  // Ground clutter - logs and bushes
+  // Ground clutter - logs and bushes (hidden during boss fight)
+  if (!_inBossFight)
   for (const c of clutter) {
     if (c.type === 'log') {
       ctx.save();
@@ -3120,7 +3136,8 @@ function draw() {
     }
   }
 
-  // Trees (behind player)
+  // Trees (behind player) - hidden during boss fight
+  if (!_hideTrees)
   for (const tree of trees) {
     let s = tree.size;
     let tx = tree.x, ty = tree.y;
@@ -3427,7 +3444,7 @@ function draw() {
     }
   }
 
-  if (!inMainMenu) {
+  if (!inMainMenu && !_inBossFight) {
   // Crash sites
   for (const site of crashSites) {
     if (site.rescued) continue;
@@ -3695,8 +3712,8 @@ function draw() {
       : (target.y > f.y ? 'down' : 'up');
     drawBean(f.x, f.y, 16, f.color, fDir, false, f.moving);
   }
-  // Mine entrance
-  {
+  // Mine entrance (hidden during boss fight)
+  if (!(mineScene.active && (mineScene.phase === 'boss' || mineScene.phase === 'victory' || mineScene.phase === 'victory_fade'))) {
     ctx.save();
     ctx.translate(mine.x, mine.y);
 
@@ -4905,7 +4922,9 @@ function draw() {
   // Skip all HUD when rendering as menu background
   if (inMainMenu) return;
 
-  // Minimap
+  // Minimap (hidden during boss fight)
+  let inBossFight = mineScene.active && (mineScene.phase === 'boss' || mineScene.phase === 'victory');
+  if (!inBossFight) {
   let mmCtx, mmW, mmH, mmX, mmY;
   if (isMobile) {
     mmCtx = minimapCtx;
@@ -4985,6 +5004,8 @@ function draw() {
   mmCtx.fillStyle = '#ff0';
   mmCtx.fillRect(mmX + (player.x / WORLD_W) * mmW - 3, mmY + (player.y / WORLD_H) * mmH - 3, 6, 6);
 
+  } // end minimap boss fight hide
+
   // Notification
   if (notifyTimer > 0) {
     ctx.fillStyle = `rgba(0,0,0,${Math.min(notifyTimer/30, 0.7)})`;
@@ -4995,7 +5016,8 @@ function draw() {
     ctx.fillText(notification, canvas.width/2, 64);
   }
 
-  // Health bar
+  // Health bar (hidden during boss fight - boss has its own UI)
+  if (!inBossFight) {
   let hbX = 10, hbY = 10, hbW = 120, hbH = 16;
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
   ctx.fillRect(hbX - 2, hbY - 2, hbW + 4, hbH + 4);
@@ -5082,6 +5104,8 @@ function draw() {
     ctx.textAlign = 'left';
     ctx.fillText(`Speed: ${Math.ceil(speedBoostTimer / 60)}s`, 140, 22);
   }
+
+  } // end health bar / hotbar boss fight hide
 
   // Quest tracker button + panel
   let visibleQuests = activeQuests.filter(q => q.accepted && !q.turned_in);
