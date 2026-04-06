@@ -2286,9 +2286,28 @@ function update() {
 }
 
 // --- DRAW ---
+// Pre-cache border fade gradients (static, never change)
+let _borderGrds = null;
+function getBorderGradients() {
+  if (_borderGrds) return _borderGrds;
+  let top = ctx.createLinearGradient(0, BORDER - 30, 0, BORDER + 10);
+  top.addColorStop(0, 'rgba(14,53,6,0.6)'); top.addColorStop(1, 'rgba(14,53,6,0)');
+  let bot = ctx.createLinearGradient(0, WORLD_H - BORDER + 10, 0, WORLD_H - BORDER - 30);
+  bot.addColorStop(0, 'rgba(14,53,6,0.6)'); bot.addColorStop(1, 'rgba(14,53,6,0)');
+  let lft = ctx.createLinearGradient(BORDER - 30, 0, BORDER + 10, 0);
+  lft.addColorStop(0, 'rgba(14,53,6,0.6)'); lft.addColorStop(1, 'rgba(14,53,6,0)');
+  let rgt = ctx.createLinearGradient(WORLD_W - BORDER + 10, 0, WORLD_W - BORDER - 30, 0);
+  rgt.addColorStop(0, 'rgba(14,53,6,0.6)'); rgt.addColorStop(1, 'rgba(14,53,6,0)');
+  _borderGrds = { top, bot, lft, rgt };
+  return _borderGrds;
+}
+
 function draw() {
   let _inBossFight = mineScene.active && (mineScene.phase === 'boss' || mineScene.phase === 'victory' || mineScene.phase === 'victory_fade');
   let _hideTrees = _inBossFight;
+  // Viewport bounds for culling (skip drawing off-screen objects)
+  let vpL = camX - 60, vpR = camX + canvas.width + 60;
+  let vpT = camY - 60, vpB = camY + canvas.height + 60;
 
   // Jungle background (cave floor during boss fight)
   if (_inBossFight) {
@@ -2329,6 +2348,7 @@ function draw() {
   // Border trees - dense packed canopies (hidden during boss fight)
   if (!_hideTrees)
   for (const bt of borderTrees) {
+    if (bt.x < vpL || bt.x > vpR || bt.y < vpT || bt.y > vpB) continue;
     // Trunk
     ctx.fillStyle = '#3a2510';
     ctx.fillRect(bt.x - 2, bt.y, 4, 8);
@@ -2344,31 +2364,18 @@ function draw() {
     ctx.fill();
   }
 
-  // Fade edge between border and playable area
-  // Top
-  let grd = ctx.createLinearGradient(0, BORDER - 30, 0, BORDER + 10);
-  grd.addColorStop(0, 'rgba(14,53,6,0.6)');
-  grd.addColorStop(1, 'rgba(14,53,6,0)');
-  ctx.fillStyle = grd;
+  // Fade edge between border and playable area (cached gradients)
+  if (!_inBossFight) {
+  let bg = getBorderGradients();
+  ctx.fillStyle = bg.top;
   ctx.fillRect(0, BORDER - 30, WORLD_W, 40);
-  // Bottom
-  grd = ctx.createLinearGradient(0, WORLD_H - BORDER + 10, 0, WORLD_H - BORDER - 30);
-  grd.addColorStop(0, 'rgba(14,53,6,0.6)');
-  grd.addColorStop(1, 'rgba(14,53,6,0)');
-  ctx.fillStyle = grd;
+  ctx.fillStyle = bg.bot;
   ctx.fillRect(0, WORLD_H - BORDER - 30, WORLD_W, 40);
-  // Left
-  grd = ctx.createLinearGradient(BORDER - 30, 0, BORDER + 10, 0);
-  grd.addColorStop(0, 'rgba(14,53,6,0.6)');
-  grd.addColorStop(1, 'rgba(14,53,6,0)');
-  ctx.fillStyle = grd;
+  ctx.fillStyle = bg.lft;
   ctx.fillRect(BORDER - 30, 0, 40, WORLD_H);
-  // Right
-  grd = ctx.createLinearGradient(WORLD_W - BORDER + 10, 0, WORLD_W - BORDER - 30, 0);
-  grd.addColorStop(0, 'rgba(14,53,6,0.6)');
-  grd.addColorStop(1, 'rgba(14,53,6,0)');
-  ctx.fillStyle = grd;
+  ctx.fillStyle = bg.rgt;
   ctx.fillRect(WORLD_W - BORDER - 30, 0, 40, WORLD_H);
+  }
 
   // Rivers (hidden during boss fight)
   if (!_inBossFight)
@@ -2420,7 +2427,7 @@ function draw() {
     ctx.stroke();
 
     // Animated water shimmer
-    let wt = Date.now() / 600;
+    let wt = frameNow / 600;
     ctx.strokeStyle = 'rgba(150,220,255,0.15)';
     ctx.lineWidth = 2;
     for (let i = 1; i < river.length - 1; i += 2) {
@@ -2511,7 +2518,7 @@ function draw() {
     if (b.name === 'Campfire') {
       let cx = b.x + b.w / 2;
       let cy = b.y + b.h / 2;
-      let t = Date.now() / 100;
+      let t = frameNow / 100;
 
       // Glow on ground
       ctx.fillStyle = 'rgba(255,150,30,0.15)';
@@ -2695,7 +2702,7 @@ function draw() {
       ctx.strokeRect(hx + 10, roofPeak - 4, 6, 4);
       ctx.strokeRect(hx + 10, roofPeak, 6, 4);
       // Smoke
-      let st = Date.now() / 800;
+      let st = frameNow / 800;
       ctx.fillStyle = 'rgba(140,140,140,0.25)';
       ctx.beginPath();
       ctx.arc(hx + 13, roofPeak - 8 + Math.sin(st) * 2, 3, 0, Math.PI * 2);
@@ -2995,7 +3002,7 @@ function draw() {
       ctx.lineTo(wx, platY - railH - 22);
       ctx.stroke();
       // Flag cloth
-      let ft = Date.now() / 300;
+      let ft = frameNow / 300;
       ctx.fillStyle = '#cc3333';
       ctx.beginPath();
       ctx.moveTo(wx, platY - railH - 22);
@@ -3028,7 +3035,7 @@ function draw() {
     // Quest indicator "!" above NPC
     if (vp.hasQuest) {
       let quest = activeQuests.find(q => q.giver === vi);
-      let bob = Math.sin(Date.now() / 300) * 2;
+      let bob = Math.sin(frameNow / 300) * 2;
       let hasEnoughSupplies = false;
       if (quest && quest.accepted && !quest.done && !quest.turned_in) {
         let itemType = quest.type === 'gather_food' ? 'food' : quest.type === 'gather_medkit' ? 'medkit' : null;
@@ -3058,6 +3065,7 @@ function draw() {
   // Ground clutter - logs and bushes (hidden during boss fight)
   if (!_inBossFight)
   for (const c of clutter) {
+    if (c.x < vpL || c.x > vpR || c.y < vpT || c.y > vpB) continue;
     if (c.type === 'log') {
       ctx.save();
       ctx.translate(c.x, c.y);
@@ -3141,11 +3149,12 @@ function draw() {
   for (const tree of trees) {
     let s = tree.size;
     let tx = tree.x, ty = tree.y;
+    if (tx < vpL - s || tx > vpR + s || ty < vpT - s || ty > vpB + s) continue;
 
     if (tree.type === 0) {
       // PALM TREE
       let trunkH = s * 1.3;
-      let wind = Math.sin(Date.now() / 1800 + tree.sway) * 2.5;
+      let wind = Math.sin(frameNow / 1800 + tree.sway) * 2.5;
       let curve = s * 0.18 + wind;
 
       // Shadow on ground
@@ -3240,7 +3249,7 @@ function draw() {
     } else if (tree.type === 1) {
       // BIG JUNGLE TREE
       let trunkH = s * 0.95;
-      let wind = Math.sin(Date.now() / 2000 + tree.sway) * 1.5;
+      let wind = Math.sin(frameNow / 2000 + tree.sway) * 1.5;
 
       // Ground shadow - larger, softer, offset by wind
       ctx.fillStyle = 'rgba(0,0,0,0.18)';
@@ -3448,6 +3457,7 @@ function draw() {
   // Crash sites
   for (const site of crashSites) {
     if (site.rescued) continue;
+    if (site.x < vpL - 60 || site.x > vpR + 60 || site.y < vpT - 60 || site.y > vpB + 60) continue;
 
     // Smoke
     for (const s of site.smoke) {
@@ -3632,7 +3642,7 @@ function draw() {
       ctx.fillStyle = '#777';
       ctx.save();
       ctx.translate(-50, -5);
-      ctx.rotate(Date.now() / 400);
+      ctx.rotate(frameNow / 400);
       ctx.fillRect(-2, -10, 4, 20);
       ctx.restore();
 
@@ -3689,14 +3699,14 @@ function draw() {
     ctx.fillText(`${site.survivors} survivor${site.survivors > 1 ? 's' : ''}`, site.x, site.y - 23);
 
     // Pulsing ring
-    let pulse = Math.sin(Date.now() / 300) * 8 + 45;
+    let pulse = Math.sin(frameNow / 300) * 8 + 45;
     ctx.strokeStyle = 'rgba(255, 50, 50, 0.3)';
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(site.x, site.y, pulse, 0, Math.PI * 2);
     ctx.stroke();
     // Inner pulse
-    let pulse2 = Math.sin(Date.now() / 200) * 4 + 30;
+    let pulse2 = Math.sin(frameNow / 200) * 4 + 30;
     ctx.strokeStyle = 'rgba(255, 150, 50, 0.2)';
     ctx.beginPath();
     ctx.arc(site.x, site.y, pulse2, 0, Math.PI * 2);
@@ -3948,12 +3958,12 @@ function draw() {
     ctx.lineWidth = 0.7;
     ctx.strokeRect(-2, -14, 4, 5);
     // Lantern glow
-    let lanternGlow = Math.sin(Date.now() / 500) * 0.15 + 0.35;
+    let lanternGlow = Math.sin(frameNow / 500) * 0.15 + 0.35;
     ctx.fillStyle = `rgba(255,180,40,${lanternGlow})`;
     ctx.beginPath(); ctx.arc(0, -12, 10, 0, Math.PI * 2); ctx.fill();
 
     // Animated gold sparkles in the rock face
-    let t = Date.now();
+    let t = frameNow;
     let sparkles = [
       { x: -17, y: -30, phase: 0 },
       { x: 16, y: -36, phase: 1.5 },
@@ -3997,7 +4007,7 @@ function draw() {
 
     // Indicator above mine when quest is active
     if (troubledPersonFound && !mineFound) {
-      let bob = Math.sin(Date.now() / 300) * 3;
+      let bob = Math.sin(frameNow / 300) * 3;
       ctx.fillStyle = '#ffdd00';
       ctx.font = 'bold 14px Arial';
       ctx.textAlign = 'center';
@@ -4396,8 +4406,9 @@ function draw() {
   if (inMainMenu) { /* skip items */ } else
   for (const item of worldItems) {
     if (item.collected) continue;
+    if (item.x < vpL || item.x > vpR || item.y < vpT || item.y > vpB) continue;
     let it = ITEM_TYPES[item.type];
-    let bob = Math.sin(Date.now() / 400 + item.x) * 3;
+    let bob = Math.sin(frameNow / 400 + item.x) * 3;
     // Glow
     ctx.fillStyle = `${it.color}33`;
     ctx.beginPath();
@@ -4429,6 +4440,7 @@ function draw() {
 
   // Wolves
   for (const wolf of wolves) {
+    if (wolf.x < vpL - 40 || wolf.x > vpR + 40 || wolf.y < vpT - 40 || wolf.y > vpB + 40) continue;
     // Detection range circle
     if (!inMainMenu) {
     let distToPlayer = Math.hypot(player.x - wolf.x, player.y - wolf.y);
@@ -4456,7 +4468,7 @@ function draw() {
 
     let isChasing = wolf.state === 'chase';
     let isAttacking = wolf.attackTimer > 0;
-    let t = inMainMenu ? 0 : Date.now();
+    let t = inMainMenu ? 0 : frameNow;
 
     // Fur colors
     let furDark, furMain, furLight, furBelly;
@@ -4975,7 +4987,7 @@ function draw() {
     if (site.rescued) continue;
     if (watchtowerJobs.scout.assigned > 0) {
       // Scout reveals with blinking SOS
-      mmCtx.fillStyle = Math.sin(Date.now() / 300) > 0 ? '#ff4' : '#f44';
+      mmCtx.fillStyle = Math.sin(frameNow / 300) > 0 ? '#ff4' : '#f44';
       mmCtx.fillRect(mmX + (site.x / WORLD_W) * mmW - 3, mmY + (site.y / WORLD_H) * mmH - 3, 6, 6);
     }
   }
@@ -4992,7 +5004,7 @@ function draw() {
 
   // Mine on minimap (visible once quest is active)
   if (troubledPersonFound && !mineFound) {
-    let mSparkle = Math.sin(Date.now() / 400) > 0 ? '#ffdd00' : '#aa8800';
+    let mSparkle = Math.sin(frameNow / 400) > 0 ? '#ffdd00' : '#aa8800';
     mmCtx.fillStyle = mSparkle;
     mmCtx.fillRect(mmX + (mine.x / WORLD_W) * mmW - 3, mmY + (mine.y / WORLD_H) * mmH - 3, 6, 6);
   } else if (mineFound) {
@@ -5378,7 +5390,7 @@ function draw() {
     ctx.stroke();
 
     // Gold veins on cave walls
-    let t = Date.now();
+    let t = frameNow;
     for (let i = 0; i < 16; i++) {
       let ang = (i / 16) * Math.PI * 2 + 0.3;
       let gx = arenaSX + Math.cos(ang) * (arenaR + 5);
@@ -5443,7 +5455,7 @@ function draw() {
       // Stunned effect - stars circling above head
       if (bossWolf.stunned) {
         let bsx = bossWolf.x - camX, bsy = bossWolf.y - camY;
-        let st = Date.now() / 200;
+        let st = frameNow / 200;
         for (let i = 0; i < 3; i++) {
           let ang = st + (i / 3) * Math.PI * 2;
           let sx = bsx + Math.cos(ang) * 14;
@@ -5761,7 +5773,7 @@ function draw() {
     // Restart prompt
     ctx.fillStyle = '#ffcc44';
     ctx.font = 'bold 20px Arial';
-    let blink = Math.sin(Date.now() / 400) > 0;
+    let blink = Math.sin(frameNow / 400) > 0;
     let _onMobile = isMobile || window.matchMedia('(max-width: 1024px) and (pointer: coarse)').matches || ('ontouchstart' in window);
     if (blink) ctx.fillText(_onMobile ? 'Press Anywhere to Restart' : 'Press R to Restart', canvas.width/2, canvas.height/2 + 80);
   }
@@ -6718,7 +6730,20 @@ if (isMobile) {
 }
 
 // --- GAME LOOP ---
-function gameLoop() {
+const TARGET_FPS = isMobile ? 30 : 60;
+const FRAME_TIME = 1000 / TARGET_FPS;
+let lastFrameTime = 0;
+let frameNow = 0; // cached timestamp for the current frame
+
+function gameLoop(timestamp) {
+  let elapsed = timestamp - lastFrameTime;
+  if (elapsed < FRAME_TIME) {
+    requestAnimationFrame(gameLoop);
+    return;
+  }
+  lastFrameTime = timestamp - (elapsed % FRAME_TIME);
+  frameNow = timestamp;
+
   if (inMainMenu) {
     // Make sure mobile touch zones don't block main menu buttons
     let mc = document.getElementById('mobile-controls');
@@ -6733,7 +6758,7 @@ function gameLoop() {
   requestAnimationFrame(gameLoop);
 }
 
-gameLoop();
+requestAnimationFrame(gameLoop);
 
 // --- DEBUG PANEL ---
 const debugPanel = document.getElementById('debug-panel');
