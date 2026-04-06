@@ -1114,6 +1114,9 @@ let helpYellActive = false;
 let helpYellX = 0;
 let troubledPersonFound = false;
 let mineFound = false;
+const mineScene = { active: false, phase: '', fadeTimer: 0, fadeIn: 0 };
+const BOSS_PACK_ID = 98;
+let bossWolf = null;
 const troubledPerson = {
   x: 320, y: 320,
   facing: 'down',
@@ -1200,8 +1203,9 @@ window.addEventListener('keydown', e => {
 
 // --- UPDATE ---
 function update() {
-  // Player movement
+  // Player movement (disabled during mine cutscene)
   let dx = 0, dy = 0;
+  if (!mineScene.active || mineScene.phase === 'speech' || mineScene.phase === 'boss') {
   if (keys['ArrowLeft'] || keys['a'] || keys['A']) { dx = -1; player.facing = 'left'; }
   if (keys['ArrowRight'] || keys['d'] || keys['D']) { dx = 1; player.facing = 'right'; }
   if (keys['ArrowUp'] || keys['w'] || keys['W']) { dy = -1; player.facing = 'up'; }
@@ -1217,6 +1221,7 @@ function update() {
       player.facing = dy > 0 ? 'down' : 'up';
     }
   }
+  } // end mine scene input guard
 
   // Close quest menu on movement
   if ((dx !== 0 || dy !== 0) && questMenuOpen) {
@@ -1293,10 +1298,350 @@ function update() {
   }
 
   // Check mine discovery (player and miner must both be near)
-  if (!mineFound && troubledPersonFound && troubledPerson.following) {
+  if (!mineFound && !mineScene.active && troubledPersonFound && troubledPerson.following) {
     let playerDist = Math.hypot(player.x - mine.x, player.y - mine.y);
     let minerDist = Math.hypot(troubledPerson.x - mine.x, troubledPerson.y - mine.y);
     if (playerDist < 50 && minerDist < 70) {
+      // Start mine entrance cutscene
+      mineScene.active = true;
+      mineScene.phase = 'speech';
+      troubledPerson.following = false;
+      troubledPerson.movingFollow = false;
+      // Miner faces the player
+      let dx = player.x - troubledPerson.x;
+      let dy = player.y - troubledPerson.y;
+      if (Math.abs(dx) > Math.abs(dy)) troubledPerson.facing = dx > 0 ? 'right' : 'left';
+      else troubledPerson.facing = dy > 0 ? 'down' : 'up';
+      // Speech
+      troubledPerson.speechText = 'Follow me!';
+      troubledPerson.speechTimer = 9999;
+      troubledPerson.speechWaiting = true;
+      troubledPerson.speechPhase = 10; // special phase for mine scene
+    }
+  }
+  // Mine entrance cutscene - walk into the mine
+  if (mineScene.active && mineScene.phase === 'enter') {
+    let spd = 1.5;
+    // Miner walks toward mine entrance
+    let mdx = mine.x - troubledPerson.x;
+    let mdy = mine.y - troubledPerson.y;
+    let mdist = Math.hypot(mdx, mdy);
+    if (mdist > 3) {
+      troubledPerson.x += (mdx / mdist) * spd;
+      troubledPerson.y += (mdy / mdist) * spd;
+      troubledPerson.movingFollow = true;
+      if (Math.abs(mdx) > Math.abs(mdy)) troubledPerson.facing = mdx > 0 ? 'right' : 'left';
+      else troubledPerson.facing = mdy > 0 ? 'down' : 'up';
+    }
+    // Player walks toward mine entrance
+    let pdx = mine.x - player.x;
+    let pdy = mine.y - player.y;
+    let pdist = Math.hypot(pdx, pdy);
+    if (pdist > 3) {
+      player.x += (pdx / pdist) * spd;
+      player.y += (pdy / pdist) * spd;
+      if (Math.abs(pdx) > Math.abs(pdy)) player.facing = pdx > 0 ? 'right' : 'left';
+      else player.facing = pdy > 0 ? 'down' : 'up';
+    }
+    // Both arrived
+    if (mdist <= 3 && pdist <= 3) {
+      mineScene.fadeTimer = 60;
+      mineScene.phase = 'fade';
+    }
+  }
+  // Fade to black then start boss fight
+  if (mineScene.active && mineScene.phase === 'fade') {
+    mineScene.fadeTimer--;
+    if (mineScene.fadeTimer <= 0) {
+      mineScene.phase = 'boss';
+      mineScene.fadeIn = 40;
+      // Position player and miner inside the mine arena
+      player.x = mine.x - 30;
+      player.y = mine.y + 20;
+      player.facing = 'up';
+      troubledPerson.x = mine.x + 30;
+      troubledPerson.y = mine.y + 20;
+      troubledPerson.facing = 'up';
+      troubledPerson.following = false;
+      troubledPerson.movingFollow = false;
+      troubledPerson.health = troubledPerson.maxHealth;
+      // Spawn boss wolf
+      bossWolf = {
+        x: mine.x, y: mine.y - 30,
+        angle: Math.PI, speed: 1.0,
+        state: 'chase', attackTimer: 0,
+        facing: 'down',
+        health: 12, maxHealth: 12,
+        pack: BOSS_PACK_ID, isAlpha: true,
+        dashTimer: 0, dashCooldown: 120,
+        dashing: false, dashWindup: 0,
+        dashDx: 0, dashDy: 0, dashSpeed: 8,
+        dashTrail: [],
+        scratchCooldown: 70, scratching: false,
+        scratchTimer: 0, scratchDir: 0,
+        scratchMarks: []
+      };
+      wolves.push(bossWolf);
+    }
+  }
+  // Boss fight - confine player and miner to mine area, miner AI fights boss
+  if (mineScene.active && mineScene.phase === 'boss') {
+    if (mineScene.fadeIn > 0) mineScene.fadeIn--;
+    let arenaR = 70;
+    // Confine player
+    let pdx = player.x - mine.x, pdy = player.y - mine.y;
+    let pdist = Math.hypot(pdx, pdy);
+    if (pdist > arenaR) {
+      player.x = mine.x + (pdx / pdist) * arenaR;
+      player.y = mine.y + (pdy / pdist) * arenaR;
+    }
+    // Confine miner
+    let mdx = troubledPerson.x - mine.x, mdy = troubledPerson.y - mine.y;
+    let mdist = Math.hypot(mdx, mdy);
+    if (mdist > arenaR) {
+      troubledPerson.x = mine.x + (mdx / mdist) * arenaR;
+      troubledPerson.y = mine.y + (mdy / mdist) * arenaR;
+    }
+    // Confine boss wolf + wall stun on dash
+    if (bossWolf) {
+      let bx = bossWolf.x - mine.x, by = bossWolf.y - mine.y;
+      let bd = Math.hypot(bx, by);
+      if (bd > arenaR) {
+        bossWolf.x = mine.x + (bx / bd) * arenaR;
+        bossWolf.y = mine.y + (by / bd) * arenaR;
+        if (bossWolf.dashing) {
+          // Hit the wall mid-dash - get stunned
+          bossWolf.dashing = false;
+          bossWolf.dashTimer = 0;
+          bossWolf.stunned = true;
+          bossWolf.stunTimer = 90; // stunned for 1.5 seconds
+          bossWolf.state = 'idle';
+          bossWolf.dashCooldown = 60;
+        }
+      }
+      // Stun countdown
+      if (bossWolf.stunned) {
+        bossWolf.stunTimer--;
+        bossWolf.state = 'idle';
+        if (bossWolf.stunTimer <= 0) {
+          bossWolf.stunned = false;
+          bossWolf.state = 'chase';
+        }
+      }
+    }
+    // Miner AI - fights the boss wolf
+    if (bossWolf && bossWolf.health > 0) {
+      let tdx = bossWolf.x - troubledPerson.x;
+      let tdy = bossWolf.y - troubledPerson.y;
+      let tlen = Math.hypot(tdx, tdy) || 1;
+      if (Math.abs(tdx) > Math.abs(tdy)) troubledPerson.facing = tdx > 0 ? 'right' : 'left';
+      else troubledPerson.facing = tdy > 0 ? 'down' : 'up';
+      troubledPerson.movingFollow = false;
+      if (tlen > 40) {
+        troubledPerson.x += (tdx / tlen) * player.speed;
+        troubledPerson.y += (tdy / tlen) * player.speed;
+        troubledPerson.movingFollow = true;
+        troubledPerson.walkTimer++;
+      }
+      if (troubledPerson.attackTimer > 0) troubledPerson.attackTimer--;
+      if (tlen < 80 && troubledPerson.attackTimer === 0 && !troubledPerson.whip.active) {
+        troubledPerson.attackTimer = 35;
+        troubledPerson.whip.active = true;
+        troubledPerson.whip.timer = 20;
+        troubledPerson.whip.x = troubledPerson.x;
+        troubledPerson.whip.y = troubledPerson.y;
+        let wdir = 1 / tlen;
+        troubledPerson.whip.endX = troubledPerson.x + tdx * wdir * 70;
+        troubledPerson.whip.endY = troubledPerson.y + tdy * wdir * 70;
+        // Hit check
+        let wpx = troubledPerson.whip.endX - troubledPerson.whip.x;
+        let wpy = troubledPerson.whip.endY - troubledPerson.whip.y;
+        let len2 = wpx * wpx + wpy * wpy;
+        let t = Math.max(0, Math.min(1, ((bossWolf.x - troubledPerson.whip.x) * wpx + (bossWolf.y - troubledPerson.whip.y) * wpy) / len2));
+        let projX = troubledPerson.whip.x + t * wpx;
+        let projY = troubledPerson.whip.y + t * wpy;
+        if (Math.hypot(bossWolf.x - projX, bossWolf.y - projY) < 30) {
+          bossWolf.health--;
+          let kbAngle = Math.atan2(bossWolf.y - troubledPerson.y, bossWolf.x - troubledPerson.x);
+          bossWolf.x += Math.cos(kbAngle) * 20;
+          bossWolf.y += Math.sin(kbAngle) * 20;
+        }
+      }
+    }
+    if (troubledPerson.whip.active) {
+      troubledPerson.whip.timer--;
+      if (troubledPerson.whip.timer <= 0) troubledPerson.whip.active = false;
+    }
+    if (troubledPerson.hurtTimer > 0) troubledPerson.hurtTimer--;
+    if (troubledPerson.invincible > 0) troubledPerson.invincible--;
+    // Boss dash attack
+    if (bossWolf && bossWolf.health > 0) {
+      if (bossWolf.dashCooldown > 0) bossWolf.dashCooldown--;
+      // Start dash windup - pick closer target
+      if (!bossWolf.dashing && bossWolf.dashWindup <= 0 && bossWolf.dashCooldown <= 0 && !bossWolf.stunned) {
+        let dpDist = Math.hypot(player.x - bossWolf.x, player.y - bossWolf.y);
+        let dmDist = Math.hypot(troubledPerson.x - bossWolf.x, troubledPerson.y - bossWolf.y);
+        let tx, ty;
+        if (dpDist < dmDist) { tx = player.x; ty = player.y; }
+        else { tx = troubledPerson.x; ty = troubledPerson.y; }
+        let ddx = tx - bossWolf.x, ddy = ty - bossWolf.y;
+        let dlen = Math.hypot(ddx, ddy) || 1;
+        bossWolf.dashDx = ddx / dlen;
+        bossWolf.dashDy = ddy / dlen;
+        bossWolf.dashWindup = 40; // frames to charge
+      }
+      // Windup - wolf shakes/telegraphs
+      if (bossWolf.dashWindup > 0 && !bossWolf.dashing) {
+        bossWolf.dashWindup--;
+        // Lock facing toward dash direction
+        if (Math.abs(bossWolf.dashDx) > Math.abs(bossWolf.dashDy)) {
+          bossWolf.facing = bossWolf.dashDx > 0 ? 'right' : 'left';
+        } else {
+          bossWolf.facing = bossWolf.dashDy > 0 ? 'down' : 'up';
+        }
+        // Stop normal movement during windup
+        bossWolf.state = 'idle';
+        if (bossWolf.dashWindup <= 0) {
+          bossWolf.dashing = true;
+          bossWolf.dashTimer = 15; // dash duration in frames
+          bossWolf.dashTrail = [];
+        }
+      }
+      // Active dash
+      if (bossWolf.dashing) {
+        bossWolf.state = 'idle'; // override normal AI
+        bossWolf.dashTrail.push({ x: bossWolf.x, y: bossWolf.y, life: 10 });
+        bossWolf.x += bossWolf.dashDx * bossWolf.dashSpeed;
+        bossWolf.y += bossWolf.dashDy * bossWolf.dashSpeed;
+        bossWolf.dashTimer--;
+        // Hit player
+        if (Math.hypot(player.x - bossWolf.x, player.y - bossWolf.y) < 25 && player.invincible <= 0) {
+          if (shieldActive) {
+            shieldActive = false;
+            notify('Shield blocked the dash!');
+          } else {
+            player.health -= 2;
+          }
+          player.hurtTimer = 30;
+          player.invincible = 60;
+          let kbAngle = Math.atan2(player.y - bossWolf.y, player.x - bossWolf.x);
+          player.x += Math.cos(kbAngle) * 25;
+          player.y += Math.sin(kbAngle) * 25;
+        }
+        // Hit miner
+        if (Math.hypot(troubledPerson.x - bossWolf.x, troubledPerson.y - bossWolf.y) < 25 && troubledPerson.invincible <= 0) {
+          troubledPerson.health--;
+          troubledPerson.hurtTimer = 30;
+          troubledPerson.invincible = 60;
+          let kbAngle = Math.atan2(troubledPerson.y - bossWolf.y, troubledPerson.x - bossWolf.x);
+          troubledPerson.x += Math.cos(kbAngle) * 25;
+          troubledPerson.y += Math.sin(kbAngle) * 25;
+        }
+        if (bossWolf.dashTimer <= 0) {
+          bossWolf.dashing = false;
+          bossWolf.dashCooldown = 90 + Math.floor(Math.random() * 60);
+          bossWolf.state = 'chase';
+        }
+      }
+      // Decay dash trail
+      for (let i = bossWolf.dashTrail.length - 1; i >= 0; i--) {
+        bossWolf.dashTrail[i].life--;
+        if (bossWolf.dashTrail[i].life <= 0) bossWolf.dashTrail.splice(i, 1);
+      }
+      // Scratch attack
+      if (bossWolf.scratchCooldown > 0) bossWolf.scratchCooldown--;
+      // Decay scratch marks
+      for (let i = bossWolf.scratchMarks.length - 1; i >= 0; i--) {
+        bossWolf.scratchMarks[i].life--;
+        if (bossWolf.scratchMarks[i].life <= 0) bossWolf.scratchMarks.splice(i, 1);
+      }
+      // Start scratch when close to target and not doing other attacks
+      if (!bossWolf.scratching && !bossWolf.dashing && bossWolf.dashWindup <= 0 && !bossWolf.stunned && bossWolf.scratchCooldown <= 0) {
+        let dpDist = Math.hypot(player.x - bossWolf.x, player.y - bossWolf.y);
+        let dmDist = Math.hypot(troubledPerson.x - bossWolf.x, troubledPerson.y - bossWolf.y);
+        let closeDist = Math.min(dpDist, dmDist);
+        if (closeDist < 50) {
+          bossWolf.scratching = true;
+          bossWolf.scratchTimer = 20;
+          // Direction toward closest target
+          let tx = dpDist < dmDist ? player.x : troubledPerson.x;
+          let ty = dpDist < dmDist ? player.y : troubledPerson.y;
+          bossWolf.scratchDir = Math.atan2(ty - bossWolf.y, tx - bossWolf.x);
+          // Spawn 3 scratch claw marks in front of the wolf
+          let baseX = bossWolf.x + Math.cos(bossWolf.scratchDir) * 25;
+          let baseY = bossWolf.y + Math.sin(bossWolf.scratchDir) * 25;
+          let perpX = Math.cos(bossWolf.scratchDir + Math.PI / 2);
+          let perpY = Math.sin(bossWolf.scratchDir + Math.PI / 2);
+          for (let s = -1; s <= 1; s++) {
+            bossWolf.scratchMarks.push({
+              x: baseX + perpX * s * 8,
+              y: baseY + perpY * s * 8,
+              angle: bossWolf.scratchDir,
+              life: 30, hitDealt: false
+            });
+          }
+          bossWolf.state = 'idle';
+        }
+      }
+      // Active scratch
+      if (bossWolf.scratching) {
+        bossWolf.state = 'idle';
+        bossWolf.scratchTimer--;
+        // Check hits during first frames
+        if (bossWolf.scratchTimer > 10) {
+          for (let sm of bossWolf.scratchMarks) {
+            if (sm.hitDealt) continue;
+            // Hit player
+            if (Math.hypot(player.x - sm.x, player.y - sm.y) < 18 && player.invincible <= 0) {
+              sm.hitDealt = true;
+              if (shieldActive) {
+                shieldActive = false;
+                notify('Shield blocked the scratch!');
+              } else {
+                player.health--;
+              }
+              player.hurtTimer = 30;
+              player.invincible = 40;
+              let kbAngle = Math.atan2(player.y - bossWolf.y, player.x - bossWolf.x);
+              player.x += Math.cos(kbAngle) * 15;
+              player.y += Math.sin(kbAngle) * 15;
+            }
+            // Hit miner
+            if (Math.hypot(troubledPerson.x - sm.x, troubledPerson.y - sm.y) < 18 && troubledPerson.invincible <= 0) {
+              sm.hitDealt = true;
+              troubledPerson.health--;
+              troubledPerson.hurtTimer = 30;
+              troubledPerson.invincible = 40;
+              let kbAngle = Math.atan2(troubledPerson.y - bossWolf.y, troubledPerson.x - bossWolf.x);
+              troubledPerson.x += Math.cos(kbAngle) * 15;
+              troubledPerson.y += Math.sin(kbAngle) * 15;
+            }
+          }
+        }
+        if (bossWolf.scratchTimer <= 0) {
+          bossWolf.scratching = false;
+          bossWolf.scratchCooldown = 50 + Math.floor(Math.random() * 40);
+          bossWolf.state = 'chase';
+        }
+      }
+    }
+    // Check if boss defeated
+    if (bossWolf && bossWolf.health <= 0) {
+      bossWolf = null;
+      mineScene.phase = 'victory';
+      mineScene.fadeTimer = 120;
+      troubledPerson.speechText = 'We did it! This mine will save the village!';
+      troubledPerson.speechTimer = 9999;
+      troubledPerson.speechWaiting = true;
+      troubledPerson.speechPhase = 11; // victory speech
+    }
+  }
+  // Victory - wait for speech dismiss then fade out and complete
+  if (mineScene.active && mineScene.phase === 'victory_fade') {
+    mineScene.fadeTimer--;
+    if (mineScene.fadeTimer <= 0) {
+      mineScene.active = false;
+      mineScene.phase = 'done';
       mineFound = true;
       troubledPerson.active = false;
       troubledPerson.following = false;
@@ -1556,7 +1901,14 @@ function update() {
     // Quest-pack wolves also target the NPC — pick closer one
     let tgtX = player.x, tgtY = player.y, tgtIsNpc = false;
     let distToTarget = distToPlayer;
-    if (wolf.pack === TROUBLED_PACK_ID && troubledPerson.active && troubledPerson.found) {
+    if (wolf.pack === TROUBLED_PACK_ID && troubledPerson.active && troubledPerson.found && troubledPerson.speechTimer <= 0) {
+      let distToNpc = Math.hypot(troubledPerson.x - wolf.x, troubledPerson.y - wolf.y);
+      if (distToNpc < distToPlayer) {
+        tgtX = troubledPerson.x; tgtY = troubledPerson.y; tgtIsNpc = true;
+        distToTarget = distToNpc;
+      }
+    }
+    if (wolf.pack === BOSS_PACK_ID && troubledPerson.active) {
       let distToNpc = Math.hypot(troubledPerson.x - wolf.x, troubledPerson.y - wolf.y);
       if (distToNpc < distToPlayer) {
         tgtX = troubledPerson.x; tgtY = troubledPerson.y; tgtIsNpc = true;
@@ -1566,7 +1918,9 @@ function update() {
 
     // Pack wolves get alerted if ANY packmate spotted the player
     let isAlerted = (wolf.pack >= 0 && alertedPacks.has(wolf.pack));
-    let shouldChase = (distToTarget < WOLF_DETECT || isAlerted) && !playerInVillage;
+    // Quest wolves wait until NPC finishes talking
+    let questWolfWaiting = wolf.pack === TROUBLED_PACK_ID && troubledPerson.speechTimer > 0;
+    let shouldChase = (distToTarget < WOLF_DETECT || isAlerted) && !playerInVillage && !questWolfWaiting;
 
     if (shouldChase) {
       wolf.state = 'chase';
@@ -1790,44 +2144,46 @@ function update() {
       let ddx = player.x - troubledPerson.x, ddy = player.y - troubledPerson.y;
       if (Math.hypot(ddx, ddy) < 40) {
         troubledPerson.found = true;
-        if (!troubledPerson.wolvesSpawned) {
-          troubledPerson.wolvesSpawned = true;
-          for (let i = 0; i < 4; i++) {
-            let isAlpha = i === 0;
-            let wx, wy, tries = 0;
-            do {
-              let ang = Math.random() * Math.PI * 2;
-              let dist = 90 + Math.random() * 20;
-              wx = troubledPerson.x + Math.cos(ang) * dist;
-              wy = troubledPerson.y + Math.sin(ang) * dist;
-              tries++;
-            } while (Math.hypot(wx - player.x, wy - player.y) < 90 && tries < 20);
-            wolves.push({
-              x: wx, y: wy,
-              angle: Math.random() * Math.PI * 2,
-              speed: isAlpha ? 1.4 : 1.2,
-              state: 'chase',
-              attackTimer: 0,
-              facing: 'right',
-              health: isAlpha ? 5 : 3,
-              maxHealth: isAlpha ? 5 : 3,
-              pack: TROUBLED_PACK_ID,
-              isAlpha: isAlpha
-            });
-          }
-        }
-        // First speech line
+        // Speech plays first, wolves spawn after speech ends
         troubledPerson.speechText = "Help! Wolves attacked me at the mine!";
         troubledPerson.speechTimer = 9999;
         troubledPerson.speechWaiting = true;
         troubledPerson.speechPhase = 1;
       }
-    } else {
-      // Advance speech bubble (wait for space)
-      if (troubledPerson.speechTimer > 0 && !troubledPerson.speechWaiting) {
-        troubledPerson.speechTimer--;
-      }
+    }
+    // Spawn wolves after NPC finishes talking
+    if (troubledPerson.found && !troubledPerson.wolvesSpawned && troubledPerson.speechTimer <= 0 && troubledPerson.speechPhase === 0) {
+      troubledPerson.wolvesSpawned = true;
+      for (let i = 0; i < 4; i++) {
+        let isAlpha = i === 0;
+        let wx, wy, tries = 0;
+        do {
+          let ang = Math.random() * Math.PI * 2;
+          let dist = 90 + Math.random() * 20;
+          wx = troubledPerson.x + Math.cos(ang) * dist;
+          wy = troubledPerson.y + Math.sin(ang) * dist;
+          tries++;
+        } while (Math.hypot(wx - player.x, wy - player.y) < 90 && tries < 20);
+        wolves.push({
+          x: wx, y: wy,
+          angle: Math.random() * Math.PI * 2,
+          speed: isAlpha ? 1.4 : 1.2,
+          state: 'chase',
+          attackTimer: 0,
+          facing: 'right',
+          health: isAlpha ? 5 : 3,
+          maxHealth: isAlpha ? 5 : 3,
+          pack: TROUBLED_PACK_ID,
+          isAlpha: isAlpha
+            });
+          }
+    }
+    // Advance speech bubble (wait for space)
+    if (troubledPerson.speechTimer > 0 && !troubledPerson.speechWaiting) {
+      troubledPerson.speechTimer--;
+    }
 
+    if (troubledPerson.wolvesSpawned) {
       // AI: move toward nearest quest wolf, whip attack like player
       let target = null, tbest = Infinity;
       for (const w of wolves) {
@@ -1890,6 +2246,7 @@ function update() {
       if (!anyLeft) {
         troubledPersonFound = true;
         troubledPerson.following = true;
+        troubledPerson.health = troubledPerson.maxHealth;
         notify('The miner is safe! Lead them to the mine.');
       }
     }
@@ -3334,106 +3691,302 @@ function draw() {
     drawBean(f.x, f.y, 16, f.color, fDir, false, f.moving);
   }
   // Mine entrance
-  if (!mineFound) {
+  {
     ctx.save();
     ctx.translate(mine.x, mine.y);
 
-    // Rocky hillside / mound
-    ctx.fillStyle = '#5a5040';
+    // Dirt clearing around the mine
+    ctx.fillStyle = '#4a3a1a';
     ctx.beginPath();
-    ctx.moveTo(-40, 10);
-    ctx.quadraticCurveTo(-35, -30, 0, -38);
-    ctx.quadraticCurveTo(35, -30, 40, 10);
-    ctx.closePath();
+    ctx.ellipse(0, 12, 55, 20, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = '#3a3530';
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    ctx.fillStyle = '#3e3015';
+    ctx.beginPath();
+    ctx.ellipse(5, 14, 40, 14, 0.2, 0, Math.PI * 2);
+    ctx.fill();
 
-    // Rock texture
+    // Scattered rocks on the ground
+    ctx.fillStyle = '#6a6055';
+    ctx.beginPath(); ctx.ellipse(-35, 16, 6, 4, 0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#5a5548';
+    ctx.beginPath(); ctx.ellipse(30, 18, 5, 3, -0.2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#7a7568';
+    ctx.beginPath(); ctx.ellipse(-22, 22, 4, 3, 0.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#6a6458';
+    ctx.beginPath(); ctx.ellipse(38, 10, 3, 2, 0, 0, Math.PI * 2); ctx.fill();
+
+    // Rock pile on the right (excavated material)
     ctx.fillStyle = '#6a6050';
-    ctx.beginPath(); ctx.arc(-18, -15, 6, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(15, -20, 5, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(25, -5, 7, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#4a4538';
-    ctx.beginPath(); ctx.arc(-25, -5, 5, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(5, -28, 4, 0, Math.PI * 2); ctx.fill();
-
-    // Dark mine entrance (arch)
-    ctx.fillStyle = '#1a1008';
     ctx.beginPath();
-    ctx.moveTo(-18, 10);
-    ctx.lineTo(-18, -8);
-    ctx.quadraticCurveTo(0, -22, 18, -8);
-    ctx.lineTo(18, 10);
+    ctx.moveTo(32, 14);
+    ctx.quadraticCurveTo(40, -2, 52, 6);
+    ctx.quadraticCurveTo(56, 14, 48, 18);
+    ctx.lineTo(32, 18);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#7a7060';
+    ctx.beginPath(); ctx.ellipse(40, 8, 5, 4, 0.2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#5a5545';
+    ctx.beginPath(); ctx.ellipse(46, 12, 4, 3, -0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#8a8070';
+    ctx.beginPath(); ctx.ellipse(38, 14, 3, 2, 0, 0, Math.PI * 2); ctx.fill();
+
+    // Rocky cliff face / hillside
+    let grd = ctx.createLinearGradient(0, -55, 0, 10);
+    grd.addColorStop(0, '#6a6050');
+    grd.addColorStop(0.4, '#5a5040');
+    grd.addColorStop(1, '#4a4030');
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.moveTo(-50, 14);
+    ctx.lineTo(-48, -5);
+    ctx.quadraticCurveTo(-42, -35, -20, -45);
+    ctx.quadraticCurveTo(0, -52, 20, -45);
+    ctx.quadraticCurveTo(42, -35, 48, -5);
+    ctx.lineTo(50, 14);
     ctx.closePath();
     ctx.fill();
 
-    // Wooden support beams
-    ctx.strokeStyle = '#8a6a30';
-    ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.moveTo(-18, 10); ctx.lineTo(-18, -8); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(18, 10); ctx.lineTo(18, -8); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(-20, -8); ctx.quadraticCurveTo(0, -20, 20, -8); ctx.stroke();
+    // Rock face cracks and texture
+    ctx.strokeStyle = '#3a3530';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(-30, -30); ctx.lineTo(-25, -15); ctx.lineTo(-28, -5); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(22, -35); ctx.lineTo(25, -20); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-10, -42); ctx.lineTo(-8, -32); ctx.lineTo(-12, -22); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(10, -38); ctx.lineTo(14, -25); ctx.lineTo(10, -15); ctx.stroke();
 
-    // Pickaxe leaning against entrance
-    ctx.strokeStyle = '#7a5a20';
+    // Rock ledges / layers
+    ctx.strokeStyle = '#6a6555';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(-40, -15); ctx.quadraticCurveTo(-20, -18, 0, -16); ctx.quadraticCurveTo(20, -14, 40, -17); ctx.stroke();
+    ctx.strokeStyle = '#555045';
+    ctx.beginPath(); ctx.moveTo(-35, -5); ctx.quadraticCurveTo(-10, -8, 15, -5); ctx.quadraticCurveTo(30, -3, 42, -6); ctx.stroke();
+
+    // Embedded rock details
+    ctx.fillStyle = '#7a7565';
+    ctx.beginPath(); ctx.ellipse(-32, -22, 7, 5, 0.2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#5a5545';
+    ctx.beginPath(); ctx.ellipse(28, -28, 6, 4, -0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#686358';
+    ctx.beginPath(); ctx.ellipse(-15, -10, 5, 3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#7a7060';
+    ctx.beginPath(); ctx.ellipse(35, -10, 5, 4, 0.4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#4a4538';
+    ctx.beginPath(); ctx.ellipse(-38, -8, 4, 3, 0, 0, Math.PI * 2); ctx.fill();
+
+    // Gold vein streaks in the rock
+    ctx.strokeStyle = '#b8962a';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(-20, -35); ctx.quadraticCurveTo(-15, -30, -18, -25); ctx.stroke();
+    ctx.strokeStyle = '#c8a630';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(15, -40); ctx.lineTo(18, -33); ctx.lineTo(14, -28); ctx.stroke();
+    ctx.strokeStyle = '#a8862a';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(30, -20); ctx.lineTo(34, -14); ctx.stroke();
+
+    // Gold nugget spots on rock
+    ctx.fillStyle = '#c8a830';
+    ctx.beginPath(); ctx.arc(-17, -30, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#dabb40';
+    ctx.beginPath(); ctx.arc(16, -36, 1.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#b89828';
+    ctx.beginPath(); ctx.arc(32, -16, 1.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#d4ad35';
+    ctx.beginPath(); ctx.arc(-35, -14, 1.5, 0, Math.PI * 2); ctx.fill();
+
+    // Dark mine entrance (deeper arch)
+    let entrGrd = ctx.createRadialGradient(0, -2, 2, 0, -2, 22);
+    entrGrd.addColorStop(0, '#050200');
+    entrGrd.addColorStop(1, '#1a1008');
+    ctx.fillStyle = entrGrd;
+    ctx.beginPath();
+    ctx.moveTo(-20, 14);
+    ctx.lineTo(-20, -8);
+    ctx.quadraticCurveTo(-18, -18, 0, -22);
+    ctx.quadraticCurveTo(18, -18, 20, -8);
+    ctx.lineTo(20, 14);
+    ctx.closePath();
+    ctx.fill();
+
+    // Depth shadow inside entrance
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.moveTo(-16, 14);
+    ctx.lineTo(-16, -5);
+    ctx.quadraticCurveTo(0, -16, 16, -5);
+    ctx.lineTo(16, 14);
+    ctx.closePath();
+    ctx.fill();
+
+    // Wooden support frame - vertical beams
+    ctx.fillStyle = '#6a4a1a';
+    ctx.fillRect(-22, -10, 5, 24);
+    ctx.fillRect(17, -10, 5, 24);
+    // Wood grain on left beam
+    ctx.strokeStyle = '#5a3a10';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(-20, -8); ctx.lineTo(-20, 12); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-19, -6); ctx.lineTo(-19, 10); ctx.stroke();
+    // Wood grain on right beam
+    ctx.beginPath(); ctx.moveTo(20, -8); ctx.lineTo(20, 12); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(19, -6); ctx.lineTo(19, 10); ctx.stroke();
+
+    // Horizontal header beam
+    ctx.fillStyle = '#7a5a22';
+    ctx.beginPath();
+    ctx.moveTo(-24, -10);
+    ctx.quadraticCurveTo(0, -24, 24, -10);
+    ctx.quadraticCurveTo(0, -18, -24, -10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#5a3a10';
+    ctx.lineWidth = 0.7;
+    ctx.beginPath(); ctx.moveTo(-22, -12); ctx.quadraticCurveTo(0, -22, 22, -12); ctx.stroke();
+
+    // Nails / bolts on beams
+    ctx.fillStyle = '#999';
+    ctx.beginPath(); ctx.arc(-21, -8, 1.2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(21, -8, 1.2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(-21, 4, 1.2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(21, 4, 1.2, 0, Math.PI * 2); ctx.fill();
+
+    // Mine cart rail tracks on ground
+    ctx.strokeStyle = '#5a5550';
     ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(24, 8); ctx.lineTo(32, -16); ctx.stroke();
-    ctx.fillStyle = '#888';
-    ctx.beginPath(); ctx.moveTo(28, -14); ctx.lineTo(36, -18); ctx.lineTo(34, -12); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-12, 14); ctx.lineTo(-14, 24); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(12, 14); ctx.lineTo(14, 24); ctx.stroke();
+    // Rail ties
+    ctx.strokeStyle = '#5a4020';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(-14, 17); ctx.lineTo(14, 17); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-15, 22); ctx.lineTo(15, 22); ctx.stroke();
 
-    // Ore sparkle (animated)
-    let sparkle = Math.sin(Date.now() / 400) * 0.5 + 0.5;
-    ctx.fillStyle = `rgba(255,215,0,${sparkle * 0.8})`;
-    ctx.beginPath(); ctx.arc(-8, -2, 2, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(6, -5, 1.5, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(0, 2, 1.5, 0, Math.PI * 2); ctx.fill();
+    // Mine cart
+    ctx.fillStyle = '#5a5550';
+    ctx.beginPath();
+    ctx.moveTo(-10, 22);
+    ctx.lineTo(-12, 28);
+    ctx.lineTo(12, 28);
+    ctx.lineTo(10, 22);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#444';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // Cart wheels
+    ctx.fillStyle = '#444';
+    ctx.beginPath(); ctx.arc(-9, 29, 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(9, 29, 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.arc(-9, 29, 2.5, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(9, 29, 2.5, 0, Math.PI * 2); ctx.stroke();
+    // Rocks/ore in cart
+    ctx.fillStyle = '#7a7060';
+    ctx.beginPath(); ctx.arc(-4, 25, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#686050';
+    ctx.beginPath(); ctx.arc(3, 24, 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#c8a830';
+    ctx.beginPath(); ctx.arc(0, 23, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#dabb40';
+    ctx.beginPath(); ctx.arc(-6, 24, 1.5, 0, Math.PI * 2); ctx.fill();
+
+    // Pickaxe leaning against rock
+    ctx.save();
+    ctx.translate(28, 6);
+    ctx.rotate(-0.3);
+    ctx.strokeStyle = '#6a4a18';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(0, 18); ctx.lineTo(0, -10); ctx.stroke();
+    // Pickaxe metal head
+    ctx.fillStyle = '#777';
+    ctx.beginPath();
+    ctx.moveTo(-8, -10);
+    ctx.quadraticCurveTo(-4, -14, 0, -12);
+    ctx.quadraticCurveTo(4, -14, 8, -10);
+    ctx.quadraticCurveTo(4, -8, 0, -9);
+    ctx.quadraticCurveTo(-4, -8, -8, -10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth = 0.7;
+    ctx.stroke();
+    ctx.restore();
+
+    // Lantern hanging from beam
+    ctx.fillStyle = '#8a6a20';
+    ctx.fillRect(-3, -16, 6, 3);
+    ctx.fillStyle = 'rgba(255,200,50,0.4)';
+    ctx.beginPath(); ctx.arc(0, -12, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#dda020';
+    ctx.fillRect(-2, -14, 4, 5);
+    ctx.strokeStyle = '#8a6a20';
+    ctx.lineWidth = 0.7;
+    ctx.strokeRect(-2, -14, 4, 5);
+    // Lantern glow
+    let lanternGlow = Math.sin(Date.now() / 500) * 0.15 + 0.35;
+    ctx.fillStyle = `rgba(255,180,40,${lanternGlow})`;
+    ctx.beginPath(); ctx.arc(0, -12, 10, 0, Math.PI * 2); ctx.fill();
+
+    // Animated gold sparkles in the rock face
+    let t = Date.now();
+    let sparkles = [
+      { x: -17, y: -30, phase: 0 },
+      { x: 16, y: -36, phase: 1.5 },
+      { x: 32, y: -16, phase: 3 },
+      { x: -35, y: -14, phase: 4.5 },
+      { x: -5, y: -20, phase: 2.2 },
+      { x: 25, y: -30, phase: 5 }
+    ];
+    for (let sp of sparkles) {
+      let brightness = Math.sin(t / 300 + sp.phase) * 0.5 + 0.5;
+      if (brightness > 0.6) {
+        let sz = (brightness - 0.6) * 5;
+        ctx.fillStyle = `rgba(255,225,80,${brightness * 0.9})`;
+        ctx.beginPath(); ctx.arc(sp.x, sp.y, sz, 0, Math.PI * 2); ctx.fill();
+        // Star sparkle effect
+        ctx.strokeStyle = `rgba(255,235,100,${(brightness - 0.6) * 2})`;
+        ctx.lineWidth = 0.5;
+        ctx.beginPath(); ctx.moveTo(sp.x - sz * 2, sp.y); ctx.lineTo(sp.x + sz * 2, sp.y); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(sp.x, sp.y - sz * 2); ctx.lineTo(sp.x, sp.y + sz * 2); ctx.stroke();
+      }
+    }
+
+    // "GOLD MINE" sign on wooden post
+    // Post
+    ctx.fillStyle = '#6a4a18';
+    ctx.fillRect(-42, -10, 4, 24);
+    // Sign board
+    ctx.fillStyle = '#7a5a22';
+    ctx.fillRect(-52, -12, 24, 12);
+    ctx.strokeStyle = '#5a3a10';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(-52, -12, 24, 12);
+    // Text
+    ctx.fillStyle = '#ddb830';
+    ctx.font = 'bold 6px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('GOLD', -40, -5);
+    ctx.fillText('MINE', -40, 0);
 
     ctx.restore();
 
     // Indicator above mine when quest is active
-    if (troubledPersonFound) {
+    if (troubledPersonFound && !mineFound) {
       let bob = Math.sin(Date.now() / 300) * 3;
       ctx.fillStyle = '#ffdd00';
       ctx.font = 'bold 14px Arial';
       ctx.textAlign = 'center';
-      ctx.fillText('?', mine.x, mine.y - 46 + bob);
+      ctx.fillText('?', mine.x, mine.y - 60 + bob);
     }
-  } else {
-    // Discovered mine - darker, no indicator
-    ctx.save();
-    ctx.translate(mine.x, mine.y);
-    ctx.fillStyle = '#5a5040';
-    ctx.beginPath();
-    ctx.moveTo(-40, 10);
-    ctx.quadraticCurveTo(-35, -30, 0, -38);
-    ctx.quadraticCurveTo(35, -30, 40, 10);
-    ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = '#3a3530';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.fillStyle = '#6a6050';
-    ctx.beginPath(); ctx.arc(-18, -15, 6, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(15, -20, 5, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(25, -5, 7, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#1a1008';
-    ctx.beginPath();
-    ctx.moveTo(-18, 10); ctx.lineTo(-18, -8);
-    ctx.quadraticCurveTo(0, -22, 18, -8); ctx.lineTo(18, 10);
-    ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = '#8a6a30';
-    ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.moveTo(-18, 10); ctx.lineTo(-18, -8); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(18, 10); ctx.lineTo(18, -8); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(-20, -8); ctx.quadraticCurveTo(0, -20, 20, -8); ctx.stroke();
-    // Green checkmark
-    ctx.fillStyle = '#44ff44';
-    ctx.font = 'bold 14px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText('\u2713', 0, -46);
-    ctx.restore();
+    if (mineFound) {
+      ctx.fillStyle = '#44ff44';
+      ctx.font = 'bold 14px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('\u2713', mine.x, mine.y - 60);
+    }
   }
 
   } // end !inMainMenu crash/followers block
@@ -3853,7 +4406,7 @@ function draw() {
     ctx.setLineDash([]);
     } // end !inMainMenu detection circle
 
-    let s = wolf.isAlpha ? 28 : 22;
+    let s = wolf.pack === BOSS_PACK_ID ? 38 : wolf.isAlpha ? 28 : 22;
     ctx.save();
     ctx.translate(wolf.x, wolf.y);
     let flip = wolf.facing === 'left' ? -1 : 1;
@@ -4739,6 +5292,191 @@ function draw() {
     if (helpYellX > canvas.width + 50) helpYellActive = false;
   }
 
+  // Mine entrance cutscene fade
+  if (mineScene.active && mineScene.phase === 'fade') {
+    let alpha = 1 - (mineScene.fadeTimer / 60);
+    ctx.fillStyle = `rgba(0,0,0,${alpha})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  // Mine boss arena overlay - dark cave walls around the fight area
+  if (mineScene.active && (mineScene.phase === 'boss' || mineScene.phase === 'victory')) {
+    ctx.save();
+    // Dark cave overlay - everything outside the arena
+    let arenaR = 70;
+    let arenaSX = mine.x - camX;
+    let arenaSY = mine.y - camY;
+
+    // Fade in from black
+    let fadeAlpha = mineScene.fadeIn > 0 ? mineScene.fadeIn / 40 : 0;
+
+    // Dark surrounding
+    ctx.fillStyle = '#0a0804';
+    ctx.beginPath();
+    ctx.rect(0, 0, canvas.width, canvas.height);
+    ctx.arc(arenaSX, arenaSY, arenaR + 20, 0, Math.PI * 2, true);
+    ctx.fill();
+
+    // Rocky cave wall ring
+    ctx.strokeStyle = '#3a3028';
+    ctx.lineWidth = 25;
+    ctx.beginPath();
+    ctx.arc(arenaSX, arenaSY, arenaR + 8, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = '#4a4030';
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.arc(arenaSX, arenaSY, arenaR + 18, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Cave floor texture inside arena
+    ctx.fillStyle = '#2a2218';
+    ctx.beginPath();
+    ctx.arc(arenaSX, arenaSY, arenaR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#322a1e';
+    ctx.beginPath();
+    ctx.arc(arenaSX - 10, arenaSY + 5, arenaR * 0.7, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Gold veins on cave walls
+    let t = Date.now();
+    for (let i = 0; i < 8; i++) {
+      let ang = (i / 8) * Math.PI * 2 + 0.3;
+      let gx = arenaSX + Math.cos(ang) * (arenaR + 5);
+      let gy = arenaSY + Math.sin(ang) * (arenaR + 5);
+      let sparkle = Math.sin(t / 400 + i * 1.2) * 0.4 + 0.4;
+      ctx.fillStyle = `rgba(200,170,50,${sparkle * 0.6})`;
+      ctx.beginPath();
+      ctx.arc(gx, gy, 2 + sparkle, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Boss dash effects
+    if (bossWolf && bossWolf.health > 0) {
+      // Dash trail - red afterimages
+      for (let tr of bossWolf.dashTrail) {
+        let alpha = tr.life / 10 * 0.5;
+        ctx.fillStyle = `rgba(255,60,30,${alpha})`;
+        ctx.beginPath();
+        ctx.arc(tr.x - camX, tr.y - camY, 12, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // Windup telegraph - wolf shakes and shows warning
+      if (bossWolf.dashWindup > 0 && !bossWolf.dashing) {
+        let bsx = bossWolf.x - camX, bsy = bossWolf.y - camY;
+        let intensity = 1 - (bossWolf.dashWindup / 40);
+        // Pulsing red ring around wolf
+        let pulseR = 15 + intensity * 10;
+        ctx.strokeStyle = `rgba(255,50,30,${0.3 + intensity * 0.5})`;
+        ctx.lineWidth = 2 + intensity * 2;
+        ctx.beginPath();
+        ctx.arc(bsx, bsy, pulseR, 0, Math.PI * 2);
+        ctx.stroke();
+        // Direction indicator line
+        let lineLen = 30 + intensity * 40;
+        ctx.strokeStyle = `rgba(255,80,40,${0.2 + intensity * 0.4})`;
+        ctx.lineWidth = 3;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(bsx, bsy);
+        ctx.lineTo(bsx + bossWolf.dashDx * lineLen, bsy + bossWolf.dashDy * lineLen);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        // "!" warning
+        if (bossWolf.dashWindup < 20) {
+          ctx.fillStyle = '#ff3322';
+          ctx.font = 'bold 16px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText('!', bsx, bsy - 28);
+        }
+      }
+      // Active dash - motion blur effect
+      if (bossWolf.dashing) {
+        let bsx = bossWolf.x - camX, bsy = bossWolf.y - camY;
+        ctx.strokeStyle = 'rgba(255,100,50,0.6)';
+        ctx.lineWidth = 4;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(bsx - bossWolf.dashDx * 20, bsy - bossWolf.dashDy * 20);
+        ctx.lineTo(bsx, bsy);
+        ctx.stroke();
+      }
+      // Stunned effect - stars circling above head
+      if (bossWolf.stunned) {
+        let bsx = bossWolf.x - camX, bsy = bossWolf.y - camY;
+        let st = Date.now() / 200;
+        for (let i = 0; i < 3; i++) {
+          let ang = st + (i / 3) * Math.PI * 2;
+          let sx = bsx + Math.cos(ang) * 14;
+          let sy = bsy - 28 + Math.sin(ang) * 5;
+          ctx.fillStyle = '#ffdd44';
+          ctx.font = '10px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText('\u2605', sx, sy);
+        }
+      }
+      // Scratch claw marks
+      for (let sm of bossWolf.scratchMarks) {
+        let sx = sm.x - camX, sy = sm.y - camY;
+        let alpha = Math.min(sm.life / 15, 1);
+        let len = 14;
+        let dx = Math.cos(sm.angle) * len;
+        let dy = Math.sin(sm.angle) * len;
+        ctx.strokeStyle = `rgba(255,60,40,${alpha * 0.9})`;
+        ctx.lineWidth = 2.5;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(sx - dx, sy - dy);
+        ctx.lineTo(sx + dx, sy + dy);
+        ctx.stroke();
+        // Glow
+        ctx.strokeStyle = `rgba(255,120,80,${alpha * 0.4})`;
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.moveTo(sx - dx, sy - dy);
+        ctx.lineTo(sx + dx, sy + dy);
+        ctx.stroke();
+      }
+    }
+
+    // "BOSS" label
+    if (bossWolf && bossWolf.health > 0) {
+      // Boss health bar at top
+      let bhbW = 140, bhbH = 10;
+      let bhbX = arenaSX - bhbW / 2, bhbY = arenaSY - arenaR - 40;
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillRect(bhbX - 4, bhbY - 16, bhbW + 8, bhbH + 20);
+      ctx.fillStyle = '#cc3333';
+      ctx.font = 'bold 10px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('ALPHA WOLF', arenaSX, bhbY - 4);
+      ctx.fillStyle = '#333';
+      ctx.fillRect(bhbX, bhbY, bhbW, bhbH);
+      let bossPct = bossWolf.health / bossWolf.maxHealth;
+      ctx.fillStyle = bossPct > 0.5 ? '#cc2222' : bossPct > 0.25 ? '#cc6600' : '#ff2222';
+      ctx.fillRect(bhbX, bhbY, bhbW * bossPct, bhbH);
+      ctx.strokeStyle = '#888';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(bhbX, bhbY, bhbW, bhbH);
+    }
+
+    // Fade from black overlay
+    if (fadeAlpha > 0) {
+      ctx.fillStyle = `rgba(0,0,0,${fadeAlpha})`;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    ctx.restore();
+  }
+
+  // Victory fade out
+  if (mineScene.active && mineScene.phase === 'victory_fade') {
+    let alpha = 1 - (mineScene.fadeTimer / 60);
+    ctx.fillStyle = `rgba(0,0,0,${alpha})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
   // Win check - requires all main quests complete
   let _rescuedAll = village.population >= totalSurvivors && totalSurvivors > 0;
   let _sideQuestsDone = activeQuests.filter(q => q.turned_in).length >= 3;
@@ -5566,6 +6304,19 @@ window.addEventListener('keydown', e => {
       troubledPerson.speechTimer = 9999;
       troubledPerson.speechWaiting = true;
       troubledPerson.speechPhase = 2;
+    } else if (troubledPerson.speechPhase === 10) {
+      // "Follow me!" dismissed — start walking into the mine
+      troubledPerson.speechText = '';
+      troubledPerson.speechTimer = 0;
+      troubledPerson.speechPhase = 0;
+      mineScene.phase = 'enter';
+    } else if (troubledPerson.speechPhase === 11) {
+      // Victory speech dismissed — fade out and complete
+      troubledPerson.speechText = '';
+      troubledPerson.speechTimer = 0;
+      troubledPerson.speechPhase = 0;
+      mineScene.phase = 'victory_fade';
+      mineScene.fadeTimer = 60;
     } else {
       troubledPerson.speechText = '';
       troubledPerson.speechTimer = 0;
@@ -5637,6 +6388,11 @@ function resetNewGame() {
   helpYellActive = false;
   troubledPersonFound = false;
   mineFound = false;
+  mineScene.active = false;
+  mineScene.phase = '';
+  mineScene.fadeTimer = 0;
+  mineScene.fadeIn = 0;
+  bossWolf = null;
   troubledPerson.active = false;
   troubledPerson.found = false;
   troubledPerson.following = false;
