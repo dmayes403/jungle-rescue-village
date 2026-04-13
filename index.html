@@ -1266,7 +1266,12 @@ canvas.addEventListener('click', e => {
   }
   // Click anywhere to restart on game over
   if (gameOver) {
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'R' }));
+    resetNewGame();
+    return;
+  }
+  // Click the Play Again button when you win
+  if (gameWon) {
+    resetNewGame();
     return;
   }
   let rect = canvas.getBoundingClientRect();
@@ -2056,6 +2061,7 @@ function update() {
           let kbAngle = Math.atan2(player.y - bossWolf.y, player.x - bossWolf.x);
           player.x += Math.cos(kbAngle) * 25;
           player.y += Math.sin(kbAngle) * 25;
+          if (player.health <= 0) killPlayer("The Amber Wolf's charge caught you.");
         }
         // Hit miner
         if (Math.hypot(troubledPerson.x - bossWolf.x, troubledPerson.y - bossWolf.y) < 25 && troubledPerson.invincible <= 0) {
@@ -2132,6 +2138,7 @@ function update() {
               }
               player.hurtTimer = 30;
               player.invincible = 40;
+              if (player.health <= 0) killPlayer("The Amber Wolf's claws found you.");
               let kbAngle = Math.atan2(player.y - bossWolf.y, player.x - bossWolf.x);
               player.x += Math.cos(kbAngle) * 15;
               player.y += Math.sin(kbAngle) * 15;
@@ -2227,12 +2234,7 @@ function update() {
             let kbAngle = Math.atan2(player.y - c.y, player.x - c.x);
             player.x += Math.cos(kbAngle) * 20;
             player.y += Math.sin(kbAngle) * 20;
-            if (player.health <= 0) {
-              player.health = 0;
-              gameOver = true;
-              followers.length = 0;
-              player.carrying = 0;
-            }
+            if (player.health <= 0) killPlayer('The amber erupted beneath you.');
           }
           c.life--;
           if (c.life <= 0) bossWolf.amberClumps.splice(i, 1);
@@ -2677,10 +2679,7 @@ function update() {
         player.x = Math.max(BORDER, Math.min(WORLD_W - BORDER, player.x));
         player.y = Math.max(BORDER, Math.min(WORLD_H - BORDER, player.y));
         if (player.health <= 0) {
-          player.health = 0;
-          gameOver = true;
-          followers.length = 0;
-          player.carrying = 0;
+          killPlayer(wolf.pack === BOSS_PACK_ID ? 'The Amber Wolf overpowered you.' : (wolf.pack >= 0 ? 'A wolf pack overwhelmed you.' : 'A lone wolf caught you.'));
         } else {
           let packMsg = wolf.pack >= 0 ? 'The wolf pack attacked you!' : 'A wolf attacked you!';
           notify(packMsg);
@@ -6602,16 +6601,21 @@ function draw() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
 
-  // Win check - requires all main quests complete
-  let _rescuedAll = village.population >= totalSurvivors && totalSurvivors > 0;
-  let _sideQuestsDone = activeQuests.filter(q => q.turned_in).length >= 3;
-  if (_rescuedAll && _sideQuestsDone && troubledPersonFound && mineFound) {
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(canvas.width/2 - 200, canvas.height/2 - 30, 400, 60);
-    ctx.fillStyle = '#ffdd00';
-    ctx.font = 'bold 28px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText('VILLAGE SAVED!', canvas.width/2, canvas.height/2 + 8);
+  // Win check - fire once when every goal is complete
+  if (!gameWon) {
+    let _rescuedAll = village.population >= totalSurvivors && totalSurvivors > 0;
+    let _sideQuestsDone = activeQuests.filter(q => q.turned_in).length >= 3;
+    if (_rescuedAll && _sideQuestsDone && troubledPersonFound && mineFound) {
+      gameWon = true;
+      gameWonFade = 0;
+      winStats = {
+        explorers: village.population,
+        total: totalSurvivors,
+        wolves: wolfKillCount,
+        buildings: village.buildings.length,
+        sideQuests: activeQuests.filter(q => q.turned_in).length
+      };
+    }
   }
 
   // Draw arrows
@@ -6817,40 +6821,174 @@ function draw() {
 
   // Game Over screen
   if (gameOver) {
-    // Hide mobile controls so player can tap anywhere to restart
+    // Hide mobile controls so player can tap the Try Again button
     if (isMobile) {
       let mc = document.getElementById('mobile-controls');
       if (mc.style.display !== 'none') mc.style.display = 'none';
     }
-    ctx.fillStyle = 'rgba(0,0,0,0.7)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (gameOverFade < 60) gameOverFade++;
+    let fade = gameOverFade / 60;
 
-    // Red vignette
+    // Dim overlay + red vignette, fading in
+    ctx.fillStyle = `rgba(0,0,0,${0.75 * fade})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     let vg = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 50, canvas.width/2, canvas.height/2, canvas.width/2);
-    vg.addColorStop(0, 'rgba(80,0,0,0.3)');
-    vg.addColorStop(1, 'rgba(30,0,0,0.6)');
+    vg.addColorStop(0, `rgba(80,0,0,${0.35 * fade})`);
+    vg.addColorStop(1, `rgba(30,0,0,${0.65 * fade})`);
     ctx.fillStyle = vg;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // GAME OVER text
-    ctx.fillStyle = '#cc2222';
-    ctx.font = 'bold 52px Arial';
+    // Card panel
+    let pw = 440, ph = 280;
+    let px = canvas.width / 2 - pw / 2;
+    let py = canvas.height / 2 - ph / 2;
+    ctx.globalAlpha = fade;
+    ctx.fillStyle = 'rgba(20,10,10,0.92)';
+    ctx.beginPath();
+    ctx.roundRect(px, py, pw, ph, 14);
+    ctx.fill();
+    ctx.strokeStyle = '#8a2222';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // GAME OVER title
+    ctx.fillStyle = '#ff3a2a';
+    ctx.font = 'bold 44px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('GAME OVER', canvas.width/2, canvas.height/2 - 30);
+    ctx.fillText('GAME OVER', canvas.width/2, py + 58);
+
+    // Cause of death
+    ctx.fillStyle = '#ffb0a0';
+    ctx.font = 'italic 16px Arial';
+    ctx.fillText(deathCause || 'You fell in battle.', canvas.width/2, py + 88);
 
     // Stats
-    ctx.fillStyle = '#ddd';
-    ctx.font = '18px Arial';
-    let rescued = crashSites.filter(s => s.rescued).reduce((sum, s) => sum + s.survivors, 0);
-    ctx.fillText(`Lost Explorers Found: ${rescued} / ${totalSurvivors}`, canvas.width/2, canvas.height/2 + 10);
-    ctx.fillText(`Village Population: ${village.population}`, canvas.width/2, canvas.height/2 + 35);
-
-    // Restart prompt
+    let rescuedCount = crashSites.filter(s => s.rescued).reduce((sum, s) => sum + s.survivors, 0);
+    ctx.fillStyle = '#e0d8c0';
+    ctx.font = '16px Arial';
+    ctx.textAlign = 'left';
+    let sx = px + 70, sy = py + 130;
+    ctx.fillText(`Lost Explorers Found:`, sx, sy);
+    ctx.fillText(`Village Population:`, sx, sy + 24);
+    ctx.fillText(`Wolves Defeated:`, sx, sy + 48);
+    ctx.textAlign = 'right';
     ctx.fillStyle = '#ffcc44';
+    ctx.fillText(`${rescuedCount} / ${totalSurvivors}`, px + pw - 70, sy);
+    ctx.fillText(`${village.population}`, px + pw - 70, sy + 24);
+    ctx.fillText(`${wolfKillCount}`, px + pw - 70, sy + 48);
+
+    // Try Again button
+    let bw = 180, bh = 44;
+    let bx = canvas.width/2 - bw/2;
+    let by = py + ph - 64;
+    let hover = Math.sin(frameNow / 400) * 0.15 + 0.85;
+    ctx.fillStyle = `rgba(180,40,30,${hover})`;
+    ctx.beginPath();
+    ctx.roundRect(bx, by, bw, bh, 10);
+    ctx.fill();
+    ctx.strokeStyle = '#ff9080';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = '#fff';
     ctx.font = 'bold 20px Arial';
-    let blink = Math.sin(frameNow / 400) > 0;
-    let _onMobile = isMobile || window.matchMedia('(max-width: 1024px) and (pointer: coarse)').matches || ('ontouchstart' in window);
-    if (blink) ctx.fillText(_onMobile ? 'Press Anywhere to Restart' : 'Press R to Restart', canvas.width/2, canvas.height/2 + 80);
+    ctx.textAlign = 'center';
+    ctx.fillText('Try Again', canvas.width/2, by + 29);
+    ctx.globalAlpha = 1;
+  }
+
+  // Win screen
+  if (gameWon) {
+    if (gameWonFade < 60) gameWonFade++;
+    let fade = gameWonFade / 60;
+
+    // Warm gold overlay
+    ctx.fillStyle = `rgba(0,0,0,${0.65 * fade})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    let vg = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 50, canvas.width/2, canvas.height/2, canvas.width/2);
+    vg.addColorStop(0, `rgba(255,200,70,${0.22 * fade})`);
+    vg.addColorStop(1, `rgba(120,70,10,${0.5 * fade})`);
+    ctx.fillStyle = vg;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Sparkle rays (rotating)
+    let rays = 12;
+    ctx.save();
+    ctx.globalAlpha = 0.25 * fade;
+    ctx.translate(canvas.width/2, canvas.height/2);
+    ctx.rotate(frameNow / 4000);
+    for (let i = 0; i < rays; i++) {
+      ctx.rotate((Math.PI * 2) / rays);
+      let g = ctx.createLinearGradient(0, 0, canvas.width * 0.6, 0);
+      g.addColorStop(0, 'rgba(255,220,120,0.8)');
+      g.addColorStop(1, 'rgba(255,220,120,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(0, -8);
+      ctx.lineTo(canvas.width * 0.6, -2);
+      ctx.lineTo(canvas.width * 0.6, 2);
+      ctx.lineTo(0, 8);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // Card panel
+    let pw = 480, ph = 320;
+    let px = canvas.width / 2 - pw / 2;
+    let py = canvas.height / 2 - ph / 2;
+    ctx.globalAlpha = fade;
+    ctx.fillStyle = 'rgba(30,20,8,0.92)';
+    ctx.beginPath();
+    ctx.roundRect(px, py, pw, ph, 16);
+    ctx.fill();
+    ctx.strokeStyle = '#f5c040';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // Title
+    ctx.fillStyle = '#ffdd55';
+    ctx.font = 'bold 44px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('VILLAGE SAVED!', canvas.width/2, py + 62);
+    ctx.fillStyle = '#e8c070';
+    ctx.font = 'italic 15px Arial';
+    ctx.fillText('The jungle is safe, the explorers are home.', canvas.width/2, py + 90);
+
+    // Stats recap
+    let sx = px + 90, sy = py + 130;
+    ctx.fillStyle = '#f0e0c0';
+    ctx.font = '16px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText(`Explorers Rescued:`, sx, sy);
+    ctx.fillText(`Village Population:`, sx, sy + 26);
+    ctx.fillText(`Buildings Raised:`, sx, sy + 52);
+    ctx.fillText(`Side Quests Complete:`, sx, sy + 78);
+    ctx.fillText(`Wolves Defeated:`, sx, sy + 104);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#ffdd55';
+    ctx.fillText(`${winStats.explorers} / ${winStats.total}`, px + pw - 90, sy);
+    ctx.fillText(`${winStats.explorers}`, px + pw - 90, sy + 26);
+    ctx.fillText(`${winStats.buildings}`, px + pw - 90, sy + 52);
+    ctx.fillText(`${winStats.sideQuests}`, px + pw - 90, sy + 78);
+    ctx.fillText(`${winStats.wolves}`, px + pw - 90, sy + 104);
+
+    // Play Again button
+    let bw = 200, bh = 46;
+    let bx = canvas.width/2 - bw/2;
+    let by = py + ph - 64;
+    let hover = Math.sin(frameNow / 400) * 0.15 + 0.85;
+    ctx.fillStyle = `rgba(200,140,40,${hover})`;
+    ctx.beginPath();
+    ctx.roundRect(bx, by, bw, bh, 12);
+    ctx.fill();
+    ctx.strokeStyle = '#ffdd55';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = '#fff8d0';
+    ctx.font = 'bold 22px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Play Again', canvas.width/2, by + 30);
+    ctx.globalAlpha = 1;
   }
 }
 
@@ -7416,6 +7554,20 @@ canvas.addEventListener('click', function mainMenuClick(e) {
 // --- PAUSE ---
 let paused = false;
 let gameOver = false;
+let gameOverFade = 0;
+let deathCause = '';
+let gameWon = false;
+let gameWonFade = 0;
+let winStats = null;
+function killPlayer(cause) {
+  if (gameOver) return;
+  player.health = 0;
+  gameOver = true;
+  gameOverFade = 0;
+  deathCause = cause || 'You fell in battle.';
+  followers.length = 0;
+  player.carrying = 0;
+}
 const pauseBtn = document.getElementById('pause-btn');
 const pauseOverlay = document.getElementById('pause-overlay');
 
@@ -7496,6 +7648,11 @@ function resetNewGame() {
   player.hurtTimer = 0;
   player.invincible = 60;
   gameOver = false;
+  gameOverFade = 0;
+  deathCause = '';
+  gameWon = false;
+  gameWonFade = 0;
+  winStats = null;
   // Reset crash sites
   for (const site of crashSites) { site.rescued = false; }
   followers.length = 0;
