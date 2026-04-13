@@ -108,7 +108,12 @@
 <button id="save-btn" class="game-btn" style="display:none">Save & Quit</button>
 <div id="debug-panel" style="display:none;position:absolute;top:10px;left:10px;z-index:999;background:rgba(0,0,0,0.85);border:2px solid #ffaa00;border-radius:8px;padding:12px;color:#fff;font:13px monospace;min-width:220px;pointer-events:auto;">
   <div style="color:#ffaa00;font-weight:bold;font-size:14px;margin-bottom:8px;border-bottom:1px solid #555;padding-bottom:4px;">DEBUG - Quest Skip <span id="debug-close" style="float:right;cursor:pointer;color:#888;">[`]</span></div>
-  <div id="debug-quests"></div>
+  <div id="debug-lock">
+    <div style="color:#f0e0b0;font-size:12px;margin-bottom:6px;">Enter passcode:</div>
+    <div id="debug-pass-boxes" style="display:flex;gap:4px;margin-bottom:6px;"></div>
+    <div id="debug-pass-error" style="color:#ff4444;font-size:11px;min-height:14px;"></div>
+  </div>
+  <div id="debug-quests" style="display:none;"></div>
 </div>
 <div id="pause-overlay"><span id="pause-text">PAUSED</span></div>
 <canvas id="game"></canvas>
@@ -470,9 +475,26 @@ for (let i = bridges.length - 1; i >= 0; i--) {
   }
 }
 
-// Crash sites
+// Random explorer look — persisted per survivor so each one looks unique
+const EXPLORER_HAT_TYPES = ['safari', 'cap', 'bucket', 'fedora'];
+const EXPLORER_HAT_COLORS = ['#5a3a18', '#6a4820', '#8a6830', '#3a2a14', '#a88040', '#4a3410'];
+const EXPLORER_HAIR_COLORS = ['#1a0f05', '#5a3510', '#8a5a20', '#3a2010', '#c89050', '#6a3018'];
+function makeExplorerStyle() {
+  return {
+    hat: EXPLORER_HAT_TYPES[Math.floor(Math.random() * EXPLORER_HAT_TYPES.length)],
+    hatColor: EXPLORER_HAT_COLORS[Math.floor(Math.random() * EXPLORER_HAT_COLORS.length)],
+    hair: EXPLORER_HAIR_COLORS[Math.floor(Math.random() * EXPLORER_HAIR_COLORS.length)]
+  };
+}
+
+// Explorer locations — half are crashes, half are friendly campsites
 const crashSites = [];
-const crashTypes = ['plane', 'helicopter'];
+// 8 sites: 4 campsites + 2 planes + 2 helicopters, shuffled
+const siteTypePool = ['campsite','campsite','campsite','campsite','plane','plane','helicopter','helicopter'];
+for (let i = siteTypePool.length - 1; i > 0; i--) {
+  let j = Math.floor(Math.random() * (i + 1));
+  [siteTypePool[i], siteTypePool[j]] = [siteTypePool[j], siteTypePool[i]];
+}
 for (let i = 0; i < 8; i++) {
   let cx, cy;
   do {
@@ -483,10 +505,22 @@ for (let i = 0; i < 8; i++) {
 
   crashSites.push({
     x: cx, y: cy,
-    type: crashTypes[Math.floor(Math.random() * 2)],
+    type: siteTypePool[i],
     survivors: 1 + Math.floor(Math.random() * 3),
     rescued: false,
-    smoke: []
+    smoke: [],
+    // Seed deterministic visual variation for campsites
+    campStyle: siteTypePool[i] === 'campsite' ? {
+      tentTilt: (Math.random() - 0.5) * 0.08,
+      backTilt: -0.25 - Math.random() * 0.25,
+      flagWave: Math.random() * 6,
+      explorer: {
+        hat: EXPLORER_HAT_TYPES[Math.floor(Math.random() * EXPLORER_HAT_TYPES.length)],
+        hatColor: EXPLORER_HAT_COLORS[Math.floor(Math.random() * EXPLORER_HAT_COLORS.length)],
+        hair: EXPLORER_HAIR_COLORS[Math.floor(Math.random() * EXPLORER_HAIR_COLORS.length)],
+        color: ['#c51111','#132ed1','#117f2d','#ed54ba','#ef7d0e','#f5f557','#3f474e','#6b2fbb','#71491e','#38fedb'][Math.floor(Math.random() * 10)]
+      }
+    } : null
   });
 }
 
@@ -651,7 +685,7 @@ const buildingTypes = [
 let walkTimer = 0;
 
 // Draw a person with head, torso, arms, legs that animate
-function drawBean(x, y, size, bodyColor, facingDir, isPlayer, isMoving, isMiner) {
+function drawBean(x, y, size, bodyColor, facingDir, isPlayer, isMoving, isMiner, explorer) {
   const s = size;
   ctx.save();
   ctx.translate(x, y);
@@ -767,7 +801,7 @@ function drawBean(x, y, size, bodyColor, facingDir, isPlayer, isMoving, isMiner)
   ctx.stroke();
 
   // Hair
-  ctx.fillStyle = '#5a3510';
+  ctx.fillStyle = (explorer && explorer.hair) || '#5a3510';
   ctx.beginPath();
   ctx.arc(0, -s * 0.42, s * 0.2, Math.PI, Math.PI * 2);
   ctx.fill();
@@ -927,6 +961,94 @@ function drawBean(x, y, size, bodyColor, facingDir, isPlayer, isMoving, isMiner)
     ctx.fillRect(-s * 0.03, s * 0.075, s * 0.06, s * 0.04);
   }
 
+  // Explorer hat styles (for rescued survivors)
+  if (explorer && !isPlayer && !isMiner) {
+    const hc = explorer.hatColor || '#5a3a18';
+    const hcLight = shadeColor(hc, 20);
+    const hcDark = shadeColor(hc, -25);
+    if (explorer.hat === 'safari') {
+      // Wide brim
+      ctx.fillStyle = hc;
+      ctx.beginPath();
+      ctx.ellipse(0, -s * 0.42, s * 0.3, s * 0.055, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Crown
+      ctx.fillStyle = hcLight;
+      ctx.beginPath();
+      ctx.moveTo(-s * 0.16, -s * 0.42);
+      ctx.quadraticCurveTo(-s * 0.16, -s * 0.57, 0, -s * 0.57);
+      ctx.quadraticCurveTo(s * 0.16, -s * 0.57, s * 0.16, -s * 0.42);
+      ctx.closePath();
+      ctx.fill();
+      // Band
+      ctx.fillStyle = hcDark;
+      ctx.fillRect(-s * 0.16, -s * 0.44, s * 0.32, s * 0.025);
+    } else if (explorer.hat === 'cap') {
+      // Rounded cap
+      ctx.fillStyle = hc;
+      ctx.beginPath();
+      ctx.arc(0, -s * 0.46, s * 0.2, Math.PI, 0);
+      ctx.closePath();
+      ctx.fill();
+      // Visor
+      ctx.fillStyle = hcDark;
+      ctx.beginPath();
+      ctx.ellipse(s * 0.06, -s * 0.42, s * 0.22, s * 0.035, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Button on top
+      ctx.fillStyle = hcLight;
+      ctx.beginPath();
+      ctx.arc(0, -s * 0.62, s * 0.025, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (explorer.hat === 'bucket') {
+      // Rounded dome
+      ctx.fillStyle = hcLight;
+      ctx.beginPath();
+      ctx.arc(0, -s * 0.44, s * 0.2, Math.PI, 0);
+      ctx.closePath();
+      ctx.fill();
+      // Wide flat brim
+      ctx.fillStyle = hc;
+      ctx.beginPath();
+      ctx.ellipse(0, -s * 0.42, s * 0.27, s * 0.045, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = hcDark;
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+    } else {
+      // Fedora
+      ctx.fillStyle = hc;
+      ctx.beginPath();
+      ctx.ellipse(0, -s * 0.42, s * 0.28, s * 0.055, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = hcLight;
+      ctx.beginPath();
+      ctx.moveTo(-s * 0.17, -s * 0.42);
+      ctx.quadraticCurveTo(-s * 0.17, -s * 0.56, -s * 0.05, -s * 0.56);
+      ctx.lineTo(s * 0.05, -s * 0.56);
+      ctx.quadraticCurveTo(s * 0.17, -s * 0.56, s * 0.17, -s * 0.42);
+      ctx.closePath();
+      ctx.fill();
+      // Crown dent
+      ctx.fillStyle = hc;
+      ctx.beginPath();
+      ctx.moveTo(-s * 0.07, -s * 0.56);
+      ctx.quadraticCurveTo(0, -s * 0.52, s * 0.07, -s * 0.56);
+      ctx.closePath();
+      ctx.fill();
+      // Hat band
+      ctx.fillStyle = hcDark;
+      ctx.fillRect(-s * 0.17, -s * 0.44, s * 0.34, s * 0.025);
+    }
+    // Small satchel strap across the torso
+    ctx.strokeStyle = hcDark;
+    ctx.lineWidth = s * 0.04;
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.18, -s * 0.12);
+    ctx.lineTo(s * 0.18, s * 0.1);
+    ctx.stroke();
+  }
+
   ctx.restore();
 }
 
@@ -940,6 +1062,182 @@ function shadeColor(color, percent) {
   return `rgb(${r},${g},${b})`;
 }
 
+// Draw a friendly campsite at a rescue location
+function drawCampsite(site) {
+  const cs = site.campStyle || {};
+  const t = frameNow;
+  // Tent (to the left of center)
+  ctx.save();
+  ctx.translate(site.x - 22, site.y - 4);
+  ctx.rotate(cs.tentTilt || 0);
+  // Ground shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(0, 16, 30, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Tent body
+  let tg = ctx.createLinearGradient(-26, 0, 26, 0);
+  tg.addColorStop(0, '#d49050');
+  tg.addColorStop(0.5, '#b07032');
+  tg.addColorStop(1, '#7a4820');
+  ctx.fillStyle = tg;
+  ctx.beginPath();
+  ctx.moveTo(-26, 14);
+  ctx.lineTo(-4, -24);
+  ctx.lineTo(4, -24);
+  ctx.lineTo(26, 14);
+  ctx.closePath();
+  ctx.fill();
+  // Seams
+  ctx.strokeStyle = 'rgba(60,36,12,0.55)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(-4, -24); ctx.lineTo(-14, 14);
+  ctx.moveTo(4, -24); ctx.lineTo(14, 14);
+  ctx.stroke();
+  // Outline
+  ctx.strokeStyle = '#4a2a10';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(-26, 14);
+  ctx.lineTo(-4, -24);
+  ctx.lineTo(4, -24);
+  ctx.lineTo(26, 14);
+  ctx.stroke();
+  // Door opening
+  ctx.fillStyle = '#1a0f04';
+  ctx.beginPath();
+  ctx.moveTo(-7, 14);
+  ctx.lineTo(0, -10);
+  ctx.lineTo(7, 14);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  // Backpack leaning on the right side of the tent
+  ctx.save();
+  ctx.translate(site.x - 4, site.y + 10);
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.beginPath();
+  ctx.ellipse(3, 12, 12, 2.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.rotate(cs.backTilt || -0.35);
+  // Body
+  ctx.fillStyle = '#4a7a32';
+  ctx.beginPath();
+  ctx.roundRect(-9, -10, 18, 20, 4);
+  ctx.fill();
+  // Flap
+  ctx.fillStyle = '#5a8a40';
+  ctx.beginPath();
+  ctx.roundRect(-10, -12, 20, 7, 2);
+  ctx.fill();
+  // Buckle
+  ctx.fillStyle = '#d8c068';
+  ctx.fillRect(-2, -8, 4, 2);
+  // Straps
+  ctx.strokeStyle = '#1a3a0a';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(-7, -8); ctx.lineTo(-7, 8);
+  ctx.moveTo(7, -8);  ctx.lineTo(7, 8);
+  ctx.stroke();
+  ctx.restore();
+
+  // Campfire (right of tent)
+  ctx.save();
+  ctx.translate(site.x + 22, site.y + 10);
+  // Stone ring
+  const stoneAngles = [0.1, 0.9, 1.8, 2.7, 3.5, 4.2, 5.0, 5.7];
+  for (let i = 0; i < stoneAngles.length; i++) {
+    let a = stoneAngles[i];
+    let sx = Math.cos(a) * 13;
+    let sy = Math.sin(a) * 6;
+    let sg = ctx.createRadialGradient(sx - 1, sy - 1, 0.5, sx, sy, 5);
+    sg.addColorStop(0, '#a89c88');
+    sg.addColorStop(1, '#5a5248');
+    ctx.fillStyle = sg;
+    ctx.beginPath();
+    ctx.ellipse(sx, sy, 4, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Ash
+  ctx.fillStyle = '#4a3828';
+  ctx.beginPath();
+  ctx.ellipse(0, 1, 9, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Logs
+  ctx.strokeStyle = '#2a180a';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-6, 0); ctx.lineTo(7, 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(-5, 3); ctx.lineTo(7, -2);
+  ctx.stroke();
+  // Flames (additive)
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  let glowR = 20 + Math.sin(t / 180) * 2;
+  let fg = ctx.createRadialGradient(0, -4, 1, 0, -4, glowR);
+  fg.addColorStop(0, 'rgba(255,200,80,0.5)');
+  fg.addColorStop(0.5, 'rgba(255,120,40,0.22)');
+  fg.addColorStop(1, 'rgba(255,80,20,0)');
+  ctx.fillStyle = fg;
+  ctx.beginPath();
+  ctx.arc(0, -4, glowR, 0, Math.PI * 2);
+  ctx.fill();
+  const layers = [
+    { c: '#ff5a1a', h: 16, w: 7, o: 0.0 },
+    { c: '#ff9030', h: 13, w: 5, o: 1.3 },
+    { c: '#ffcc40', h: 10, w: 4, o: 2.1 },
+    { c: '#fff5a0', h: 6,  w: 2, o: 3.0 }
+  ];
+  for (const L of layers) {
+    let flick = Math.sin(t / 110 + L.o) * 1.5;
+    let flick2 = Math.cos(t / 140 + L.o * 1.7) * 1;
+    ctx.fillStyle = L.c;
+    ctx.beginPath();
+    ctx.moveTo(-L.w + flick, -1);
+    ctx.quadraticCurveTo(-L.w - 1 + flick2, -L.h * 0.55, -0.5 + flick, -L.h + flick2);
+    ctx.quadraticCurveTo(L.w * 0.4 + flick, -L.h - 1 + flick2, L.w + flick2, -L.h * 0.55);
+    ctx.quadraticCurveTo(L.w + 1 + flick, -L.h * 0.2, L.w * 0.5 + flick2, -1);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+  ctx.restore();
+
+  // Signal flag (above the tent)
+  ctx.save();
+  ctx.translate(site.x - 2, site.y - 28);
+  ctx.strokeStyle = '#4a3214';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(0, -14); ctx.lineTo(0, 16);
+  ctx.stroke();
+  let wave = Math.sin((t + (cs.flagWave || 0) * 60) / 260);
+  let wave2 = Math.sin((t + (cs.flagWave || 0) * 60) / 200 + 1.1);
+  ctx.fillStyle = '#e8a838';
+  ctx.beginPath();
+  ctx.moveTo(1, -14);
+  ctx.quadraticCurveTo(9 + wave * 2, -11 + wave2, 16, -5);
+  ctx.quadraticCurveTo(9 + wave2, -2 + wave, 1, -1);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#7a4810';
+  ctx.lineWidth = 0.6;
+  ctx.stroke();
+  ctx.restore();
+
+  // Bean-style explorer standing next to the fire
+  if (cs.explorer) {
+    drawBean(site.x + 42, site.y + 4, 18, cs.explorer.color, 'left', false, false, false, cs.explorer);
+  }
+}
+
 // Watchtower jobs system
 const watchtowerJobs = {
   lookout: { name: 'Lookout', desc: 'Shows wolves on minimap', assigned: 0, max: 1 },
@@ -951,7 +1249,13 @@ const arrows = [];
 
 // Input
 const keys = {};
-window.addEventListener('keydown', e => { keys[e.key] = true; e.preventDefault(); });
+window.addEventListener('keydown', e => {
+  // Don't swallow keystrokes that target form inputs (e.g. the debug passcode)
+  let tag = e.target && e.target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+  keys[e.key] = true;
+  e.preventDefault();
+});
 
 // Click on watchtower or menu
 canvas.addEventListener('click', e => {
@@ -1119,9 +1423,19 @@ let helpYellActive = false;
 let helpYellX = 0;
 let troubledPersonFound = false;
 let mineFound = false;
-const mineScene = { active: false, phase: '', fadeTimer: 0, fadeIn: 0 };
+const mineScene = { active: false, phase: '', fadeTimer: 0, fadeIn: 0, particles: [], crumbleTimer: 0, crumbleX: 0, crumbleY: 0, crumbleS: 0, introTimer: 0, introMax: 1, sealed: false, boulderFallTimer: 0, boulderFallMax: 45 };
+const TUNNEL_HALF_W = 32;
+const TUNNEL_LEN = 110;
+const BOULDER_RADIUS = 38;
 const BOSS_PACK_ID = 98;
 let bossWolf = null;
+let shakeTimer = 0;
+let shakeMax = 1;
+let shakeMag = 0;
+let bossBarFlash = 0;
+function triggerShake(frames, mag) {
+  if (frames > shakeTimer) { shakeTimer = frames; shakeMax = frames; shakeMag = mag; }
+}
 const troubledPerson = {
   x: 320, y: 320,
   facing: 'down',
@@ -1140,7 +1454,14 @@ const troubledPerson = {
   speechText: '',
   speechTimer: 0,
   speechPhase: 0,
-  speechWaiting: false
+  speechWaiting: false,
+  retreating: false,
+  retreatPhase: '',
+  retreatTimer: 0,
+  digX: 0, digY: 0,
+  digFacing: 'left',
+  holeSize: 0,
+  gone: false
 };
 const TROUBLED_PACK_ID = 99;
 function notify(msg) {
@@ -1149,7 +1470,13 @@ function notify(msg) {
 }
 
 // Wolf collision check
-function wolfBlocked(wx, wy) {
+function wolfBlocked(wx, wy, wolf) {
+  // Boss minion wolves ignore terrain (they live inside the sealed mine arena)
+  if (wolf && wolf.bossMinion) return false;
+  // Non-boss wolves cannot enter the mine arena
+  if (!wolf || wolf.pack !== BOSS_PACK_ID) {
+    if (Math.hypot(wx - mine.x, wy - mine.y) < 280) return true;
+  }
   if (wx < BORDER || wx > WORLD_W - BORDER || wy < BORDER || wy > WORLD_H - BORDER) return true;
   if (inVillageZone(wx, wy)) return true;
   if (nearRiver(wx, wy, RIVER_WIDTH * 0.5) && !onBridge(wx, wy)) return true;
@@ -1210,7 +1537,7 @@ window.addEventListener('keydown', e => {
 function update() {
   // Player movement (disabled during mine cutscene)
   let dx = 0, dy = 0;
-  if (!mineScene.active || mineScene.phase === 'speech' || mineScene.phase === 'boss') {
+  if (!mineScene.active || mineScene.phase === 'speech' || (mineScene.phase === 'boss' && mineScene.introTimer <= 0)) {
   if (keys['ArrowLeft'] || keys['a'] || keys['A']) { dx = -1; player.facing = 'left'; }
   if (keys['ArrowRight'] || keys['d'] || keys['D']) { dx = 1; player.facing = 'right'; }
   if (keys['ArrowUp'] || keys['w'] || keys['W']) { dy = -1; player.facing = 'up'; }
@@ -1243,37 +1570,43 @@ function update() {
   let newX = player.x + dx * player.speed;
   let newY = player.y + dy * player.speed;
 
-  // Simple tree collision
+  // Inside the boss arena, outdoor collisions are hidden/invalid — skip them
+  let inBossArena = mineScene.active && (mineScene.phase === 'boss' || mineScene.phase === 'victory' || mineScene.phase === 'victory_fade');
   let blocked = false;
-  for (const tree of trees) {
-    if (tree.size < 20) continue; // only collide with big trees
-    let dist = Math.hypot(newX - tree.x, newY - tree.y);
-    if (dist < tree.size * 0.4) { blocked = true; break; }
-  }
-
-  // Log collision
-  if (!blocked) {
-    for (const c of clutter) {
-      let dist = Math.hypot(newX - c.x, newY - c.y);
-      if (dist < c.size * 0.5) { blocked = true; break; }
+  const BORDER = 150;
+  if (!inBossArena) {
+    // Simple tree collision
+    for (const tree of trees) {
+      if (tree.size < 20) continue; // only collide with big trees
+      let dist = Math.hypot(newX - tree.x, newY - tree.y);
+      if (dist < tree.size * 0.4) { blocked = true; break; }
+    }
+    // Log collision
+    if (!blocked) {
+      for (const c of clutter) {
+        let dist = Math.hypot(newX - c.x, newY - c.y);
+        if (dist < c.size * 0.5) { blocked = true; break; }
+      }
+    }
+    // River collision (bridges let you cross)
+    if (!blocked && nearRiver(newX, newY, RIVER_WIDTH * 0.4) && !onBridge(newX, newY)) {
+      blocked = true;
+    }
+    // Border forest collision
+    if (!blocked && (newX < BORDER || newX > WORLD_W - BORDER ||
+        newY < BORDER || newY > WORLD_H - BORDER)) {
+      blocked = true;
     }
   }
 
-  // River collision (bridges let you cross)
-  if (!blocked && nearRiver(newX, newY, RIVER_WIDTH * 0.4) && !onBridge(newX, newY)) {
-    blocked = true;
-  }
-
-  // Border forest collision
-  const BORDER = 150;
-  if (!blocked && (newX < BORDER || newX > WORLD_W - BORDER ||
-      newY < BORDER || newY > WORLD_H - BORDER)) {
-    blocked = true;
-  }
-
   if (!blocked) {
-    player.x = Math.max(BORDER, Math.min(WORLD_W - BORDER, newX));
-    player.y = Math.max(BORDER, Math.min(WORLD_H - BORDER, newY));
+    if (inBossArena) {
+      player.x = newX;
+      player.y = newY;
+    } else {
+      player.x = Math.max(BORDER, Math.min(WORLD_W - BORDER, newX));
+      player.y = Math.max(BORDER, Math.min(WORLD_H - BORDER, newY));
+    }
   }
 
   // Camera follows player
@@ -1281,6 +1614,37 @@ function update() {
   camY = player.y - canvas.height / 2;
   camX = Math.max(0, Math.min(WORLD_W - canvas.width, camX));
   camY = Math.max(0, Math.min(WORLD_H - canvas.height, camY));
+  // Boss fight camera: intro pan then permanent lock on mine center
+  if (mineScene.active && (mineScene.phase === 'boss' || mineScene.phase === 'victory' || mineScene.phase === 'victory_fade')) {
+    let focus = { x: mine.x, y: mine.y };
+    if (mineScene.introTimer > 0 && bossWolf) {
+      let elapsed = mineScene.introMax - mineScene.introTimer;
+      // 0-20: pan from player to boss; 20-320: hold on boss; 320-360: pan to mine center
+      if (elapsed < 20) {
+        let k = elapsed / 20;
+        k = k * k * (3 - 2 * k); // smoothstep
+        focus = { x: player.x + (bossWolf.x - player.x) * k, y: player.y + (bossWolf.y - player.y) * k };
+      } else if (elapsed < 320) {
+        focus = { x: bossWolf.x, y: bossWolf.y };
+      } else {
+        let k = (elapsed - 320) / 40;
+        k = k * k * (3 - 2 * k);
+        focus = { x: bossWolf.x + (mine.x - bossWolf.x) * k, y: bossWolf.y + (mine.y - bossWolf.y) * k };
+      }
+      mineScene.introTimer--;
+    }
+    camX = focus.x - canvas.width / 2;
+    camY = focus.y - canvas.height / 2;
+    camX = Math.max(0, Math.min(WORLD_W - canvas.width, camX));
+    camY = Math.max(0, Math.min(WORLD_H - canvas.height, camY));
+  }
+  if (shakeTimer > 0) {
+    let mag = shakeMag * (shakeTimer / shakeMax);
+    camX += (Math.random() - 0.5) * mag * 2;
+    camY += (Math.random() - 0.5) * mag * 2;
+    shakeTimer--;
+  }
+  if (bossBarFlash > 0) bossBarFlash--;
 
   // Check crash sites
   for (const site of crashSites) {
@@ -1288,12 +1652,13 @@ function update() {
     let dist = Math.hypot(player.x - site.x, player.y - site.y);
     if (dist < 60) {
       site.rescued = true;
-      notify(`Rescued ${site.survivors} survivor${site.survivors > 1 ? 's' : ''} from ${site.type} crash!`);
+      notify(`Found ${site.survivors} lost explorer${site.survivors > 1 ? 's' : ''}!`);
       for (let i = 0; i < site.survivors; i++) {
         followers.push({
           x: site.x + Math.random() * 20 - 10,
           y: site.y + Math.random() * 20 - 10,
-          color: ['#c51111','#132ed1','#117f2d','#ed54ba','#ef7d0e','#f5f557','#3f474e','#d6e0f0','#6b2fbb','#71491e','#38fedb','#50ef39'][Math.floor(Math.random()*12)]
+          color: ['#c51111','#132ed1','#117f2d','#ed54ba','#ef7d0e','#f5f557','#3f474e','#d6e0f0','#6b2fbb','#71491e','#38fedb','#50ef39'][Math.floor(Math.random()*12)],
+          explorer: makeExplorerStyle()
         });
       }
       player.carrying += site.survivors;
@@ -1360,9 +1725,14 @@ function update() {
     if (mineScene.fadeTimer <= 0) {
       mineScene.phase = 'boss';
       mineScene.fadeIn = 40;
-      // Position player and miner inside the mine arena
-      player.x = mine.x - 70;
-      player.y = mine.y + 140;
+      mineScene.introTimer = 0;
+      mineScene.introMax = 1;
+      mineScene.introTriggered = false;
+      mineScene.sealed = false;
+      mineScene.boulderFallTimer = 0;
+      // Position player at the tunnel entrance (south of the arena), miner waits inside
+      player.x = mine.x;
+      player.y = mine.y + 250 + 70; // arenaR=250, ~70 into the tunnel
       player.facing = 'up';
       troubledPerson.x = mine.x + 70;
       troubledPerson.y = mine.y + 140;
@@ -1376,7 +1746,7 @@ function update() {
         angle: Math.PI, speed: 1.0,
         state: 'chase', attackTimer: 0,
         facing: 'down',
-        health: 12, maxHealth: 12,
+        health: 15, maxHealth: 15,
         pack: BOSS_PACK_ID, isAlpha: true,
         dashTimer: 0, dashCooldown: 120,
         dashing: false, dashWindup: 0,
@@ -1384,7 +1754,8 @@ function update() {
         dashTrail: [],
         scratchCooldown: 70, scratching: false,
         scratchTimer: 0, scratchDir: 0,
-        scratchMarks: []
+        scratchMarks: [],
+        enraged: false
       };
       wolves.push(bossWolf);
     }
@@ -1393,12 +1764,49 @@ function update() {
   if (mineScene.active && mineScene.phase === 'boss') {
     if (mineScene.fadeIn > 0) mineScene.fadeIn--;
     let arenaR = 250;
-    // Confine player
+    // Confine player — allow the tunnel to the south while unsealed
     let pdx = player.x - mine.x, pdy = player.y - mine.y;
     let pdist = Math.hypot(pdx, pdy);
-    if (pdist > arenaR) {
+    let inTunnelBand = !mineScene.sealed && Math.abs(pdx) <= TUNNEL_HALF_W && pdy >= arenaR - 8 && pdy <= arenaR + TUNNEL_LEN;
+    if (pdist > arenaR && !inTunnelBand) {
       player.x = mine.x + (pdx / pdist) * arenaR;
       player.y = mine.y + (pdy / pdist) * arenaR;
+    } else if (inTunnelBand) {
+      if (player.x < mine.x - TUNNEL_HALF_W) player.x = mine.x - TUNNEL_HALF_W;
+      if (player.x > mine.x + TUNNEL_HALF_W) player.x = mine.x + TUNNEL_HALF_W;
+      if (player.y > mine.y + arenaR + TUNNEL_LEN) player.y = mine.y + arenaR + TUNNEL_LEN;
+    }
+    // Seal trigger: once player crosses into the arena, drop a boulder and start the intro
+    if (!mineScene.sealed && !mineScene.introTriggered && mineScene.boulderFallTimer === 0 && pdist < arenaR - 6) {
+      mineScene.boulderFallTimer = mineScene.boulderFallMax;
+      mineScene.introTimer = 360;
+      mineScene.introMax = 360;
+      mineScene.introTriggered = true;
+    }
+    if (mineScene.boulderFallTimer > 0) {
+      mineScene.boulderFallTimer--;
+      if (mineScene.boulderFallTimer === 0) {
+        mineScene.sealed = true;
+        triggerShake(30, 12);
+        // Dust burst at boulder impact
+        let bxp = mine.x;
+        let byp = mine.y + arenaR + 10;
+        for (let p = 0; p < 28; p++) {
+          let ang = Math.random() * Math.PI * 2;
+          let spd = 1 + Math.random() * 3;
+          mineScene.particles.push({
+            x: bxp + (Math.random() - 0.5) * 40,
+            y: byp,
+            vx: Math.cos(ang) * spd,
+            vy: Math.sin(ang) * spd - 1.5,
+            life: 40 + Math.floor(Math.random() * 15),
+            maxLife: 55,
+            size: 2 + Math.random() * 3,
+            shade: 90 + Math.floor(Math.random() * 40)
+          });
+        }
+        notify('The tunnel is sealed! There is no going back.');
+      }
     }
     // Confine miner
     let mdx = troubledPerson.x - mine.x, mdy = troubledPerson.y - mine.y;
@@ -1406,6 +1814,16 @@ function update() {
     if (mdist > arenaR) {
       troubledPerson.x = mine.x + (mdx / mdist) * arenaR;
       troubledPerson.y = mine.y + (mdy / mdist) * arenaR;
+    }
+    // Confine minion wolves to the arena
+    for (const w of wolves) {
+      if (!w.bossMinion) continue;
+      let wx = w.x - mine.x, wy = w.y - mine.y;
+      let wd = Math.hypot(wx, wy);
+      if (wd > arenaR) {
+        w.x = mine.x + (wx / wd) * arenaR;
+        w.y = mine.y + (wy / wd) * arenaR;
+      }
     }
     // Confine boss wolf + wall stun on dash
     if (bossWolf) {
@@ -1434,8 +1852,108 @@ function update() {
         }
       }
     }
-    // Miner AI - fights the boss wolf
-    if (bossWolf && bossWolf.health > 0) {
+    // Miner KO → start retreat sequence (dig a tunnel and vanish)
+    if (bossWolf && !troubledPerson.retreating && !troubledPerson.gone && troubledPerson.health <= 0 && mineScene.introTimer <= 0) {
+      troubledPerson.retreating = true;
+      troubledPerson.retreatPhase = 'moveToDig';
+      troubledPerson.retreatTimer = 0;
+      troubledPerson.health = 0;
+      troubledPerson.invincible = 99999;
+      troubledPerson.whip.active = false;
+      // Dig point on the arena wall opposite the boss
+      let angFromMine = Math.atan2(bossWolf.y - mine.y, bossWolf.x - mine.x) + Math.PI;
+      troubledPerson.digX = mine.x + Math.cos(angFromMine) * (arenaR - 18);
+      troubledPerson.digY = mine.y + Math.sin(angFromMine) * (arenaR - 18);
+      if (Math.abs(Math.cos(angFromMine)) > Math.abs(Math.sin(angFromMine))) {
+        troubledPerson.digFacing = Math.cos(angFromMine) > 0 ? 'right' : 'left';
+      } else {
+        troubledPerson.digFacing = Math.sin(angFromMine) > 0 ? 'down' : 'up';
+      }
+      troubledPerson.holeSize = 0;
+      notify('The miner is hurt — he dug an escape tunnel!');
+    }
+    // Retreat state machine
+    if (troubledPerson.retreating && !troubledPerson.gone) {
+      if (troubledPerson.retreatPhase === 'moveToDig') {
+        let dx = troubledPerson.digX - troubledPerson.x;
+        let dy = troubledPerson.digY - troubledPerson.y;
+        let d = Math.hypot(dx, dy);
+        if (d > 3) {
+          troubledPerson.x += (dx / d) * 2;
+          troubledPerson.y += (dy / d) * 2;
+          if (Math.abs(dx) > Math.abs(dy)) troubledPerson.facing = dx > 0 ? 'right' : 'left';
+          else troubledPerson.facing = dy > 0 ? 'down' : 'up';
+          troubledPerson.movingFollow = true;
+          troubledPerson.walkTimer++;
+        } else {
+          troubledPerson.x = troubledPerson.digX;
+          troubledPerson.y = troubledPerson.digY;
+          troubledPerson.facing = troubledPerson.digFacing;
+          troubledPerson.movingFollow = false;
+          troubledPerson.retreatPhase = 'digging';
+          troubledPerson.retreatTimer = 120;
+        }
+      } else if (troubledPerson.retreatPhase === 'digging') {
+        troubledPerson.retreatTimer--;
+        // Hole grows over the dig duration
+        let dp = 1 - (troubledPerson.retreatTimer / 120);
+        troubledPerson.holeSize = 18 * dp;
+        // Dirt puff every few frames on pickaxe strike
+        if (troubledPerson.retreatTimer % 10 === 0) {
+          for (let p = 0; p < 4; p++) {
+            let ang = Math.random() * Math.PI * 2;
+            let spd = 0.8 + Math.random() * 2;
+            mineScene.particles.push({
+              x: troubledPerson.digX + (Math.random() - 0.5) * 12,
+              y: troubledPerson.digY - 6 + (Math.random() - 0.5) * 6,
+              vx: Math.cos(ang) * spd,
+              vy: Math.sin(ang) * spd - 1,
+              life: 28 + Math.floor(Math.random() * 10),
+              maxLife: 38,
+              size: 1.5 + Math.random() * 2,
+              shade: 80 + Math.floor(Math.random() * 40)
+            });
+          }
+        }
+        if (troubledPerson.retreatTimer <= 0) {
+          troubledPerson.retreatPhase = 'entering';
+          troubledPerson.retreatTimer = 24;
+        }
+      } else if (troubledPerson.retreatPhase === 'entering') {
+        troubledPerson.retreatTimer--;
+        if (troubledPerson.retreatTimer <= 0) {
+          troubledPerson.retreatPhase = 'closing';
+          troubledPerson.retreatTimer = 40;
+        }
+      } else if (troubledPerson.retreatPhase === 'closing') {
+        troubledPerson.retreatTimer--;
+        // Hole shrinks back to nothing + a puff of dust when it seals
+        let cp = troubledPerson.retreatTimer / 40;
+        troubledPerson.holeSize = 18 * cp;
+        if (troubledPerson.retreatTimer === 20) {
+          for (let p = 0; p < 20; p++) {
+            let ang = Math.random() * Math.PI * 2;
+            let spd = 0.8 + Math.random() * 2;
+            mineScene.particles.push({
+              x: troubledPerson.digX,
+              y: troubledPerson.digY - 4,
+              vx: Math.cos(ang) * spd,
+              vy: Math.sin(ang) * spd - 0.8,
+              life: 30, maxLife: 30,
+              size: 1.5 + Math.random() * 2,
+              shade: 80 + Math.floor(Math.random() * 40)
+            });
+          }
+        }
+        if (troubledPerson.retreatTimer <= 0) {
+          troubledPerson.retreating = false;
+          troubledPerson.gone = true;
+          troubledPerson.holeSize = 0;
+        }
+      }
+    }
+    // Miner AI - fights the boss wolf (waits until the player enters the arena and the intro finishes)
+    if (bossWolf && bossWolf.health > 0 && mineScene.introTriggered && mineScene.introTimer <= 0 && !troubledPerson.retreating && !troubledPerson.gone) {
       let tdx = bossWolf.x - troubledPerson.x;
       let tdy = bossWolf.y - troubledPerson.y;
       let tlen = Math.hypot(tdx, tdy) || 1;
@@ -1449,15 +1967,15 @@ function update() {
         troubledPerson.walkTimer++;
       }
       if (troubledPerson.attackTimer > 0) troubledPerson.attackTimer--;
-      if (tlen < 80 && troubledPerson.attackTimer === 0 && !troubledPerson.whip.active) {
-        troubledPerson.attackTimer = 35;
+      if (tlen < 65 && troubledPerson.attackTimer === 0 && !troubledPerson.whip.active) {
+        troubledPerson.attackTimer = 95;
         troubledPerson.whip.active = true;
         troubledPerson.whip.timer = 20;
         troubledPerson.whip.x = troubledPerson.x;
         troubledPerson.whip.y = troubledPerson.y;
         let wdir = 1 / tlen;
-        troubledPerson.whip.endX = troubledPerson.x + tdx * wdir * 70;
-        troubledPerson.whip.endY = troubledPerson.y + tdy * wdir * 70;
+        troubledPerson.whip.endX = troubledPerson.x + tdx * wdir * 60;
+        troubledPerson.whip.endY = troubledPerson.y + tdy * wdir * 60;
         // Hit check
         let wpx = troubledPerson.whip.endX - troubledPerson.whip.x;
         let wpy = troubledPerson.whip.endY - troubledPerson.whip.y;
@@ -1465,7 +1983,7 @@ function update() {
         let t = Math.max(0, Math.min(1, ((bossWolf.x - troubledPerson.whip.x) * wpx + (bossWolf.y - troubledPerson.whip.y) * wpy) / len2));
         let projX = troubledPerson.whip.x + t * wpx;
         let projY = troubledPerson.whip.y + t * wpy;
-        if (Math.hypot(bossWolf.x - projX, bossWolf.y - projY) < 30) {
+        if (Math.hypot(bossWolf.x - projX, bossWolf.y - projY) < 22) {
           bossWolf.health--;
           let kbAngle = Math.atan2(bossWolf.y - troubledPerson.y, bossWolf.x - troubledPerson.x);
           bossWolf.x += Math.cos(kbAngle) * 20;
@@ -1480,12 +1998,13 @@ function update() {
     if (troubledPerson.hurtTimer > 0) troubledPerson.hurtTimer--;
     if (troubledPerson.invincible > 0) troubledPerson.invincible--;
     // Boss dash attack
-    if (bossWolf && bossWolf.health > 0) {
+    if (bossWolf && bossWolf.health > 0 && mineScene.introTriggered && mineScene.introTimer <= 0) {
       if (bossWolf.dashCooldown > 0) bossWolf.dashCooldown--;
       // Start dash windup - pick closer target
       if (!bossWolf.dashing && bossWolf.dashWindup <= 0 && bossWolf.dashCooldown <= 0 && !bossWolf.stunned) {
         let dpDist = Math.hypot(player.x - bossWolf.x, player.y - bossWolf.y);
-        let dmDist = Math.hypot(troubledPerson.x - bossWolf.x, troubledPerson.y - bossWolf.y);
+        let minerAlive = !troubledPerson.gone && !troubledPerson.retreating;
+        let dmDist = minerAlive ? Math.hypot(troubledPerson.x - bossWolf.x, troubledPerson.y - bossWolf.y) : Infinity;
         let tx, ty;
         if (dpDist < dmDist) { tx = player.x; ty = player.y; }
         else { tx = troubledPerson.x; ty = troubledPerson.y; }
@@ -1563,7 +2082,8 @@ function update() {
       // Start scratch when close to target and not doing other attacks
       if (!bossWolf.scratching && !bossWolf.dashing && bossWolf.dashWindup <= 0 && !bossWolf.stunned && bossWolf.scratchCooldown <= 0) {
         let dpDist = Math.hypot(player.x - bossWolf.x, player.y - bossWolf.y);
-        let dmDist = Math.hypot(troubledPerson.x - bossWolf.x, troubledPerson.y - bossWolf.y);
+        let minerAlive = !troubledPerson.gone && !troubledPerson.retreating;
+        let dmDist = minerAlive ? Math.hypot(troubledPerson.x - bossWolf.x, troubledPerson.y - bossWolf.y) : Infinity;
         let closeDist = Math.min(dpDist, dmDist);
         if (closeDist < 50) {
           bossWolf.scratching = true;
@@ -1630,15 +2150,124 @@ function update() {
         }
       }
     }
-    // Check if boss defeated
+    // Phase 2: at half HP, heal to full and spawn two minion wolves
+    if (bossWolf && !bossWolf.enraged && bossWolf.health > 0 && bossWolf.health <= bossWolf.maxHealth / 2) {
+      bossWolf.enraged = true;
+      bossWolf.health = bossWolf.maxHealth;
+      bossWolf.dashCooldown = 60;
+      bossWolf.scratchCooldown = 50;
+      triggerShake(45, 10);
+      bossBarFlash = 45;
+      // Spawn two minions flanking the boss
+      for (let m = -1; m <= 1; m += 2) {
+        let mx = bossWolf.x + m * 55;
+        let my = bossWolf.y + 10;
+        wolves.push({
+          x: mx, y: my,
+          angle: Math.atan2(player.y - bossWolf.y, player.x - bossWolf.x),
+          speed: 1.3,
+          state: 'chase',
+          attackTimer: 0,
+          facing: m > 0 ? 'right' : 'left',
+          health: 3, maxHealth: 3,
+          pack: BOSS_PACK_ID,
+          isAlpha: false,
+          bossMinion: true
+        });
+        // Crumbling-stone puff at the spawn point
+        for (let p = 0; p < 14; p++) {
+          let ang = Math.random() * Math.PI * 2;
+          let spd = 1 + Math.random() * 2.5;
+          mineScene.particles.push({
+            x: mx, y: my,
+            vx: Math.cos(ang) * spd,
+            vy: Math.sin(ang) * spd - 1,
+            life: 30 + Math.floor(Math.random() * 15),
+            maxLife: 45,
+            size: 2 + Math.random() * 3,
+            shade: 90 + Math.floor(Math.random() * 40)
+          });
+        }
+      }
+      notify('The Amber Wolf howls — more wolves appear!');
+    }
+    // Check if boss defeated → begin crumble animation
     if (bossWolf && bossWolf.health <= 0) {
+      mineScene.crumbleX = bossWolf.x;
+      mineScene.crumbleY = bossWolf.y;
+      mineScene.crumbleS = 48;
+      mineScene.crumbleTimer = 70;
       bossWolf = null;
-      mineScene.phase = 'victory';
-      mineScene.fadeTimer = 120;
-      troubledPerson.speechText = 'We did it! This mine will save the village!';
-      troubledPerson.speechTimer = 9999;
-      troubledPerson.speechWaiting = true;
-      troubledPerson.speechPhase = 11; // victory speech
+      // Remove any remaining minion wolves
+      for (let i = wolves.length - 1; i >= 0; i--) {
+        if (wolves[i].bossMinion) wolves.splice(i, 1);
+      }
+      triggerShake(40, 7);
+      // Seed initial rubble burst
+      for (let p = 0; p < 40; p++) {
+        let ang = Math.random() * Math.PI * 2;
+        let spd = 1 + Math.random() * 3.5;
+        mineScene.particles.push({
+          x: mineScene.crumbleX + (Math.random() - 0.5) * 40,
+          y: mineScene.crumbleY + (Math.random() - 0.5) * 20,
+          vx: Math.cos(ang) * spd,
+          vy: Math.sin(ang) * spd - 1.5,
+          life: 50 + Math.floor(Math.random() * 20),
+          maxLife: 70,
+          size: 2 + Math.random() * 4,
+          shade: 80 + Math.floor(Math.random() * 50)
+        });
+      }
+    }
+    // Crumble animation tick
+    if (mineScene.crumbleTimer > 0) {
+      mineScene.crumbleTimer--;
+      // Drop more pebbles during crumble
+      if (mineScene.crumbleTimer > 30 && mineScene.crumbleTimer % 3 === 0) {
+        let ang = Math.random() * Math.PI * 2;
+        let r = Math.random() * 22;
+        mineScene.particles.push({
+          x: mineScene.crumbleX + Math.cos(ang) * r,
+          y: mineScene.crumbleY + Math.sin(ang) * r,
+          vx: (Math.random() - 0.5) * 1.5,
+          vy: -Math.random() * 2,
+          life: 35,
+          maxLife: 45,
+          size: 2 + Math.random() * 2,
+          shade: 80 + Math.floor(Math.random() * 50)
+        });
+      }
+      if (mineScene.crumbleTimer <= 0) {
+        mineScene.phase = 'victory';
+        mineScene.fadeTimer = 120;
+        if (troubledPerson.gone) {
+          // Miner already escaped — skip the speech beat and auto-advance
+          troubledPerson.speechText = '';
+          troubledPerson.speechTimer = 0;
+          troubledPerson.speechWaiting = false;
+          troubledPerson.speechPhase = 0;
+          mineScene.phase = 'victory_fade';
+          mineScene.fadeTimer = 60;
+          notify('The Amber Wolf is defeated — the mine is safe!');
+        } else {
+          troubledPerson.speechText = 'We did it! This mine will save the village!';
+          troubledPerson.speechTimer = 9999;
+          troubledPerson.speechWaiting = true;
+          troubledPerson.speechPhase = 11;
+        }
+      }
+    }
+  }
+  // Update stone-dust particles whenever the mine scene is active
+  if (mineScene.active && mineScene.particles.length > 0) {
+    for (let i = mineScene.particles.length - 1; i >= 0; i--) {
+      let pp = mineScene.particles[i];
+      pp.x += pp.vx;
+      pp.y += pp.vy;
+      pp.vy += 0.15;
+      pp.vx *= 0.97;
+      pp.life--;
+      if (pp.life <= 0) mineScene.particles.splice(i, 1);
     }
   }
   // Victory - wait for speech dismiss then fade out and complete
@@ -1647,6 +2276,8 @@ function update() {
     if (mineScene.fadeTimer <= 0) {
       mineScene.active = false;
       mineScene.phase = 'done';
+      mineScene.particles.length = 0;
+      mineScene.crumbleTimer = 0;
       mineFound = true;
       troubledPerson.active = false;
       troubledPerson.following = false;
@@ -1692,6 +2323,7 @@ function update() {
         x: village.x + 20 + Math.random() * (village.w - 40),
         y: village.y + 20 + Math.random() * (village.h - 40),
         color: f.color,
+        explorer: f.explorer || makeExplorerStyle(),
         wanderAngle: Math.random() * Math.PI * 2,
         hasQuest: false
       });
@@ -1821,9 +2453,9 @@ function update() {
     }
   }
 
-  // Smoke particles for crash sites
+  // Smoke particles for crash sites (campsites don't produce smoke)
   for (const site of crashSites) {
-    if (site.rescued) continue;
+    if (site.rescued || site.type === 'campsite') continue;
     if (Math.random() < 0.1) {
       site.smoke.push({ x: site.x, y: site.y - 10, life: 60, size: 3 + Math.random() * 5 });
     }
@@ -1884,7 +2516,10 @@ function update() {
     }
   }
 
+  let _bossFrozen = mineScene.active && mineScene.phase === 'boss' && (!mineScene.introTriggered || mineScene.introTimer > 0);
   for (const wolf of wolves) {
+    // Freeze boss-pack wolves until the player enters the arena and the intro finishes
+    if (wolf.pack === BOSS_PACK_ID && _bossFrozen) continue;
     // Retreating quest wolves flee and disappear
     if (wolf.retreating) {
       let fleeFromX = troubledPerson.active ? troubledPerson.x : player.x;
@@ -1913,7 +2548,7 @@ function update() {
         distToTarget = distToNpc;
       }
     }
-    if (wolf.pack === BOSS_PACK_ID && troubledPerson.active) {
+    if (wolf.pack === BOSS_PACK_ID && troubledPerson.active && !troubledPerson.gone && !troubledPerson.retreating) {
       let distToNpc = Math.hypot(troubledPerson.x - wolf.x, troubledPerson.y - wolf.y);
       if (distToNpc < distToPlayer) {
         tgtX = troubledPerson.x; tgtY = troubledPerson.y; tgtIsNpc = true;
@@ -1925,7 +2560,9 @@ function update() {
     let isAlerted = (wolf.pack >= 0 && alertedPacks.has(wolf.pack));
     // Quest wolves wait until NPC finishes talking
     let questWolfWaiting = wolf.pack === TROUBLED_PACK_ID && troubledPerson.speechTimer > 0;
-    let shouldChase = (distToTarget < WOLF_DETECT || isAlerted) && !playerInVillage && !questWolfWaiting;
+    // Boss and minions always chase — the whole arena is their detection range
+    let isBossWolf = wolf.pack === BOSS_PACK_ID;
+    let shouldChase = (isBossWolf || distToTarget < WOLF_DETECT || isAlerted) && !playerInVillage && !questWolfWaiting;
 
     if (shouldChase) {
       wolf.state = 'chase';
@@ -1943,7 +2580,7 @@ function update() {
       let nwx = wolf.x + Math.cos(chaseAngle) * chaseSpeed;
       let nwy = wolf.y + Math.sin(chaseAngle) * chaseSpeed;
       wolf.facing = Math.cos(chaseAngle) > 0 ? 'right' : 'left';
-      if (!wolfBlocked(nwx, nwy)) {
+      if (!wolfBlocked(nwx, nwy, wolf)) {
         wolf.x = nwx;
         wolf.y = nwy;
       }
@@ -2017,7 +2654,7 @@ function update() {
       let newWx = wolf.x + Math.cos(wolf.angle) * wolf.speed * 0.4;
       let newWy = wolf.y + Math.sin(wolf.angle) * wolf.speed * 0.4;
       wolf.facing = Math.cos(wolf.angle) > 0 ? 'right' : 'left';
-      if (!wolfBlocked(newWx, newWy)) {
+      if (!wolfBlocked(newWx, newWy, wolf)) {
         wolf.x = newWx;
         wolf.y = newWy;
       } else {
@@ -2027,7 +2664,7 @@ function update() {
     if (wolf.attackTimer > 0) wolf.attackTimer--;
 
     // Unstick wolves that can't move
-    if (wolfBlocked(wolf.x, wolf.y)) {
+    if (wolfBlocked(wolf.x, wolf.y, wolf)) {
       if (!wolf.stuckCount) wolf.stuckCount = 0;
       wolf.stuckCount++;
       if (wolf.stuckCount > 5) {
@@ -3031,7 +3668,7 @@ function draw() {
   // Village people
   for (let vi = 0; vi < villagePeople.length; vi++) {
     let vp = villagePeople[vi];
-    drawBean(vp.x, vp.y, 14, vp.color, 'down', false, true);
+    drawBean(vp.x, vp.y, 14, vp.color, 'down', false, true, false, vp.explorer);
     // Quest indicator "!" above NPC
     if (vp.hasQuest) {
       let quest = activeQuests.find(q => q.giver === vi);
@@ -3459,34 +4096,49 @@ function draw() {
     if (site.rescued) continue;
     if (site.x < vpL - 60 || site.x > vpR + 60 || site.y < vpT - 60 || site.y > vpB + 60) continue;
 
-    // Smoke
-    for (const s of site.smoke) {
-      ctx.fillStyle = `rgba(100,100,100,${s.life/60 * 0.5})`;
+    // Smoke (only for wreckage sites)
+    if (site.type !== 'campsite') {
+      for (const s of site.smoke) {
+        ctx.fillStyle = `rgba(100,100,100,${s.life/60 * 0.5})`;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    if (site.type === 'campsite') {
+      // Worn dirt patch under the camp
+      ctx.fillStyle = '#5a4628';
       ctx.beginPath();
-      ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+      ctx.ellipse(site.x, site.y + 10, 55, 20, 0, 0, Math.PI * 2);
       ctx.fill();
+      ctx.fillStyle = '#6a5430';
+      ctx.beginPath();
+      ctx.ellipse(site.x + 3, site.y + 12, 42, 14, 0.1, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // Dirt/scorch mark under crash
+      ctx.fillStyle = '#3a2a10';
+      ctx.beginPath();
+      ctx.ellipse(site.x, site.y + 5, 45, 18, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#2a1a08';
+      ctx.beginPath();
+      ctx.ellipse(site.x + 5, site.y + 3, 30, 10, 0.3, 0, Math.PI * 2);
+      ctx.fill();
+      // Scattered debris pieces
+      ctx.fillStyle = '#555';
+      for (let d = 0; d < 5; d++) {
+        let dx2 = site.x + Math.sin(d * 1.8 + site.x) * 35;
+        let dy2 = site.y + Math.cos(d * 2.1 + site.y) * 20;
+        ctx.fillRect(dx2, dy2, 4 + d * 2, 3);
+      }
     }
 
-    // Dirt/scorch mark under crash
-    ctx.fillStyle = '#3a2a10';
-    ctx.beginPath();
-    ctx.ellipse(site.x, site.y + 5, 45, 18, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#2a1a08';
-    ctx.beginPath();
-    ctx.ellipse(site.x + 5, site.y + 3, 30, 10, 0.3, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Scattered debris pieces
-    ctx.fillStyle = '#555';
-    for (let d = 0; d < 5; d++) {
-      let dx2 = site.x + Math.sin(d * 1.8 + site.x) * 35;
-      let dy2 = site.y + Math.cos(d * 2.1 + site.y) * 20;
-      ctx.fillRect(dx2, dy2, 4 + d * 2, 3);
-    }
-
-    // Crash wreckage
-    if (site.type === 'plane') {
+    // Campsite or crash wreckage
+    if (site.type === 'campsite') {
+      drawCampsite(site);
+    } else if (site.type === 'plane') {
       ctx.save();
       ctx.translate(site.x, site.y);
       ctx.rotate(0.15); // slightly tilted
@@ -3689,14 +4341,14 @@ function draw() {
       ctx.restore();
     }
 
-    // SOS indicator
-    ctx.fillStyle = '#ff4444';
-    ctx.font = 'bold 14px Arial';
+    // Lost explorers indicator
+    ctx.fillStyle = '#ffcc44';
+    ctx.font = 'bold 13px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText(`SOS`, site.x, site.y - 35);
-    ctx.fillStyle = '#ffcc00';
+    ctx.fillText(`LOST EXPLORERS`, site.x, site.y - 35);
+    ctx.fillStyle = '#ffe088';
     ctx.font = '11px Arial';
-    ctx.fillText(`${site.survivors} survivor${site.survivors > 1 ? 's' : ''}`, site.x, site.y - 23);
+    ctx.fillText(`${site.survivors} explorer${site.survivors > 1 ? 's' : ''}`, site.x, site.y - 23);
 
     // Pulsing ring
     let pulse = Math.sin(frameNow / 300) * 8 + 45;
@@ -3720,7 +4372,7 @@ function draw() {
     const fDir = Math.abs(target.x - f.x) > Math.abs(target.y - f.y)
       ? (target.x > f.x ? 'right' : 'left')
       : (target.y > f.y ? 'down' : 'up');
-    drawBean(f.x, f.y, 16, f.color, fDir, false, f.moving);
+    drawBean(f.x, f.y, 16, f.color, fDir, false, f.moving, false, f.explorer);
   }
   // Mine entrance (hidden during boss fight)
   if (!(mineScene.active && (mineScene.phase === 'boss' || mineScene.phase === 'victory' || mineScene.phase === 'victory_fade'))) {
@@ -4441,24 +5093,23 @@ function draw() {
   // Wolves
   for (const wolf of wolves) {
     if (wolf.x < vpL - 40 || wolf.x > vpR + 40 || wolf.y < vpT - 40 || wolf.y > vpB + 40) continue;
-    // Detection range circle
-    if (!inMainMenu) {
-    let distToPlayer = Math.hypot(player.x - wolf.x, player.y - wolf.y);
-    if (wolf.state === 'chase') {
-      ctx.strokeStyle = 'rgba(255, 50, 50, 0.25)';
-      ctx.fillStyle = 'rgba(255, 50, 50, 0.05)';
-    } else {
-      ctx.strokeStyle = 'rgba(255, 200, 50, 0.15)';
-      ctx.fillStyle = 'rgba(255, 200, 50, 0.03)';
+    // Detection range circle (skipped for boss/minions — they own the whole arena)
+    if (!inMainMenu && wolf.pack !== BOSS_PACK_ID) {
+      if (wolf.state === 'chase') {
+        ctx.strokeStyle = 'rgba(255, 50, 50, 0.25)';
+        ctx.fillStyle = 'rgba(255, 50, 50, 0.05)';
+      } else {
+        ctx.strokeStyle = 'rgba(255, 200, 50, 0.15)';
+        ctx.fillStyle = 'rgba(255, 200, 50, 0.03)';
+      }
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.arc(wolf.x, wolf.y, WOLF_DETECT, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fill();
+      ctx.setLineDash([]);
     }
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([6, 4]);
-    ctx.beginPath();
-    ctx.arc(wolf.x, wolf.y, WOLF_DETECT, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.fill();
-    ctx.setLineDash([]);
-    } // end !inMainMenu detection circle
 
     let s = wolf.pack === BOSS_PACK_ID ? 48 : wolf.isAlpha ? 28 : 22;
     ctx.save();
@@ -4472,12 +5123,17 @@ function draw() {
 
     // Fur colors
     let furDark, furMain, furLight, furBelly;
-    if (wolf.isAlpha) {
+    let isBoss = wolf.pack === BOSS_PACK_ID;
+    if (isBoss) {
+      // Amber Wolf — warm honey/resin tones
+      furDark = '#7a3a10'; furMain = '#c07018'; furLight = '#f0a838'; furBelly = '#ecc070';
+    } else if (wolf.isAlpha) {
       furDark = '#2a2a2a'; furMain = '#3a3a3a'; furLight = '#5a5a5a'; furBelly = '#706860';
     } else {
       furDark = '#4a4a4a'; furMain = '#6a6a6a'; furLight = '#8a8a8a'; furBelly = '#a09890';
     }
-    if (isAttacking) { furDark = '#5a2a2a'; furMain = '#7a3a3a'; }
+    if (isAttacking && !isBoss) { furDark = '#5a2a2a'; furMain = '#7a3a3a'; }
+    if (isAttacking && isBoss) { furDark = '#8a4a18'; furMain = '#d88030'; }
 
     // Shadow
     ctx.fillStyle = 'rgba(0,0,0,0.18)';
@@ -4562,6 +5218,44 @@ function draw() {
       ctx.lineTo(f * s * 0.08 - 1, s * 0.05);
       ctx.stroke();
     }
+    // Amber glow veins overlay for boss
+    if (isBoss) {
+      // Golden highlights
+      ctx.fillStyle = 'rgba(255,220,120,0.2)';
+      ctx.beginPath();
+      ctx.ellipse(-s * 0.1, -s * 0.08, s * 0.12, s * 0.04, 0.1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(s * 0.15, -s * 0.02, s * 0.09, s * 0.03, -0.2, 0, Math.PI * 2);
+      ctx.fill();
+      // Glowing amber veins
+      ctx.strokeStyle = 'rgba(255,200,90,0.7)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(-s * 0.28, -s * 0.04);
+      ctx.lineTo(-s * 0.14, -s * 0.1);
+      ctx.lineTo(-s * 0.04, -s * 0.02);
+      ctx.lineTo(s * 0.08, -s * 0.09);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-s * 0.2, s * 0.04);
+      ctx.lineTo(-s * 0.08, s * 0.1);
+      ctx.lineTo(s * 0.06, s * 0.05);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(s * 0.18, -s * 0.05);
+      ctx.lineTo(s * 0.26, s * 0.04);
+      ctx.stroke();
+      // Sparkle dots along the veins
+      ctx.fillStyle = 'rgba(255,235,160,0.9)';
+      for (let p = 0; p < 6; p++) {
+        let px = (p - 2.5) * s * 0.12;
+        let py = ((p * 37) % 10 - 5) * 0.01 * s;
+        ctx.beginPath();
+        ctx.arc(px, py, 1.1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
 
     // --- TAIL --- bushy with fur detail
     ctx.lineWidth = 1;
@@ -4618,18 +5312,18 @@ function draw() {
     ctx.ellipse(s * 0.5, -s * 0.08 + headDip, s * 0.09, s * 0.06, -0.1, 0, Math.PI * 2);
     ctx.fill();
     // Nose
-    ctx.fillStyle = '#1a1a1a';
+    ctx.fillStyle = isBoss ? '#3a1a08' : '#1a1a1a';
     ctx.beginPath();
     ctx.ellipse(s * 0.57, -s * 0.08 + headDip, 2.5, 2, 0, 0, Math.PI * 2);
     ctx.fill();
     // Nostril detail
-    ctx.fillStyle = '#000';
+    ctx.fillStyle = isBoss ? '#1a0a04' : '#000';
     ctx.beginPath();
     ctx.arc(s * 0.565, -s * 0.075 + headDip, 0.8, 0, Math.PI * 2);
     ctx.fill();
 
     // --- MOUTH ---
-    if (isChasing || isAttacking) {
+    if ((isChasing || isAttacking) && !isBoss) {
       // Open jaw
       ctx.fillStyle = '#3a1010';
       ctx.beginPath();
@@ -4673,12 +5367,12 @@ function draw() {
     ctx.ellipse(s * 0.4, -s * 0.17 + headDip, s * 0.045, s * 0.04, -0.1, 0, Math.PI * 2);
     ctx.fill();
     // Eye white
-    ctx.fillStyle = isChasing ? '#ffdddd' : '#ffe';
+    ctx.fillStyle = isBoss ? '#fff2c0' : (isChasing ? '#ffdddd' : '#ffe');
     ctx.beginPath();
     ctx.ellipse(s * 0.4, -s * 0.17 + headDip, s * 0.035, s * 0.03, -0.1, 0, Math.PI * 2);
     ctx.fill();
     // Iris
-    ctx.fillStyle = isChasing ? '#cc2200' : '#bb8800';
+    ctx.fillStyle = isBoss ? '#f5c040' : (isChasing ? '#cc2200' : '#bb8800');
     ctx.beginPath();
     ctx.arc(s * 0.41, -s * 0.17 + headDip, s * 0.02, 0, Math.PI * 2);
     ctx.fill();
@@ -4703,7 +5397,7 @@ function draw() {
     ctx.closePath();
     ctx.fill();
     // Inner ear
-    ctx.fillStyle = '#9a7a6a';
+    ctx.fillStyle = isBoss ? '#d89048' : '#9a7a6a';
     ctx.beginPath();
     ctx.moveTo(s * 0.3, -s * 0.22 + headDip);
     ctx.lineTo(s * 0.31, -s * 0.33 + headDip);
@@ -4718,7 +5412,7 @@ function draw() {
     ctx.lineTo(s * 0.44, -s * 0.2 + headDip);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = '#a08070';
+    ctx.fillStyle = isBoss ? '#e8a858' : '#a08070';
     ctx.beginPath();
     ctx.moveTo(s * 0.38, -s * 0.22 + headDip);
     ctx.lineTo(s * 0.4, -s * 0.32 + headDip);
@@ -4750,13 +5444,65 @@ function draw() {
   }
 
   if (!inMainMenu) {
+  // Escape-tunnel hole the miner dug (drawn under the miner)
+  if (troubledPerson.active && troubledPerson.holeSize > 0) {
+    ctx.save();
+    ctx.translate(troubledPerson.digX, troubledPerson.digY);
+    // Dark inner hole
+    ctx.fillStyle = '#0a0602';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, troubledPerson.holeSize, troubledPerson.holeSize * 0.7, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Rim shadow
+    ctx.strokeStyle = '#2a1a08';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, troubledPerson.holeSize, troubledPerson.holeSize * 0.7, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    // Rubble pile at the base
+    ctx.fillStyle = '#4a3420';
+    ctx.beginPath();
+    ctx.ellipse(0, troubledPerson.holeSize * 0.8, troubledPerson.holeSize * 1.1, troubledPerson.holeSize * 0.35, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
   // Troubled person NPC
-  if (troubledPerson.active) {
+  if (troubledPerson.active && !troubledPerson.gone) {
     let tpMoving = (troubledPerson.found && wolves.some(w => w.pack === TROUBLED_PACK_ID)) || troubledPerson.movingFollow;
     if (troubledPerson.hurtTimer > 0 && Math.floor(troubledPerson.hurtTimer / 4) % 2 === 0) {
       ctx.globalAlpha = 0.4;
     }
+    // Fade out while the miner enters the hole
+    if (troubledPerson.retreating && troubledPerson.retreatPhase === 'entering') {
+      ctx.globalAlpha = troubledPerson.retreatTimer / 24;
+    }
     drawBean(troubledPerson.x, troubledPerson.y, 24, '#8a6040', troubledPerson.facing, false, tpMoving, true);
+    // Pickaxe swing while digging
+    if (troubledPerson.retreating && troubledPerson.retreatPhase === 'digging') {
+      let swing = Math.sin(troubledPerson.retreatTimer * 0.5);
+      let dirToHole = { x: troubledPerson.digX - troubledPerson.x, y: troubledPerson.digY - troubledPerson.y };
+      let len = Math.hypot(dirToHole.x, dirToHole.y) || 1;
+      let baseX = troubledPerson.x + (dirToHole.x / len) * 8;
+      let baseY = troubledPerson.y + (dirToHole.y / len) * 8 - 4;
+      let tipX = baseX + (dirToHole.x / len) * (14 + swing * 4);
+      let tipY = baseY + (dirToHole.y / len) * (14 + swing * 4) + swing * 3;
+      // Handle
+      ctx.strokeStyle = '#6a4a20';
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(baseX, baseY);
+      ctx.lineTo(tipX, tipY);
+      ctx.stroke();
+      // Head
+      ctx.strokeStyle = '#888';
+      ctx.lineWidth = 3.5;
+      let perp = { x: -(dirToHole.y / len), y: (dirToHole.x / len) };
+      ctx.beginPath();
+      ctx.moveTo(tipX - perp.x * 4, tipY - perp.y * 4);
+      ctx.lineTo(tipX + perp.x * 4, tipY + perp.y * 4);
+      ctx.stroke();
+    }
     ctx.globalAlpha = 1;
     // Health bar when in combat (not when following)
     if (troubledPerson.found && !troubledPerson.following) {
@@ -5197,7 +5943,7 @@ function draw() {
       ctx.textAlign = 'left';
       ctx.fillText('MAIN QUEST', panelX + 6, curY + 10);
       curY += 16;
-      // Main quest: Rescue all survivors (shown until complete)
+      // Main quest: Find all the lost explorers (shown until complete)
       let rescued = village.population;
       let mainDone = rescued >= totalSurvivors && totalSurvivors > 0;
       let completedSideQuests = activeQuests.filter(q => q.turned_in).length;
@@ -5208,7 +5954,7 @@ function draw() {
         ctx.fillStyle = '#f0e8d0';
         ctx.font = '10px Arial';
         ctx.fillText('\u2022', panelX + 6, curY + 10);
-        ctx.fillText('Rescue all survivors', panelX + 18, curY + 10);
+        ctx.fillText('Find all the lost explorers', panelX + 18, curY + 10);
         ctx.fillStyle = '#ffdd44';
         ctx.font = 'bold 10px Arial';
         ctx.textAlign = 'right';
@@ -5370,11 +6116,21 @@ function draw() {
     // Fade in from black
     let fadeAlpha = mineScene.fadeIn > 0 ? mineScene.fadeIn / 40 : 0;
 
-    // Dark surrounding - everything outside the arena
+    // Tunnel opening is only visible while not sealed
+    let tunnelOpen = !mineScene.sealed;
+    let tunnelSX = arenaSX - TUNNEL_HALF_W;
+    let tunnelSY = arenaSY + arenaR - 6;
+    let tunnelW = TUNNEL_HALF_W * 2;
+    let tunnelH = TUNNEL_LEN + 26;
+
+    // Dark surrounding - everything outside the arena (and the tunnel if open)
     ctx.fillStyle = '#0a0804';
     ctx.beginPath();
     ctx.rect(0, 0, canvas.width, canvas.height);
     ctx.arc(arenaSX, arenaSY, arenaR + 20, 0, Math.PI * 2, true);
+    if (tunnelOpen) {
+      ctx.rect(tunnelSX + tunnelW, tunnelSY, -tunnelW, tunnelH); // counter-clockwise for cutout
+    }
     ctx.fill();
 
     // Rocky cave wall ring
@@ -5389,6 +6145,90 @@ function draw() {
     ctx.arc(arenaSX, arenaSY, arenaR + 20, 0, Math.PI * 2);
     ctx.stroke();
 
+    // Tunnel walls (two vertical rocky strips flanking the opening)
+    if (tunnelOpen) {
+      // Clear the dark tint from the wall ring where the tunnel crosses it
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(tunnelSX - 2, tunnelSY - 4, tunnelW + 4, 40);
+      ctx.clip();
+      ctx.fillStyle = '#0a0804';
+      ctx.fillRect(tunnelSX - 2, tunnelSY - 4, tunnelW + 4, 40);
+      ctx.restore();
+      // Left and right walls of the tunnel
+      ctx.fillStyle = '#3a3028';
+      ctx.fillRect(tunnelSX - 12, tunnelSY, 12, tunnelH);
+      ctx.fillRect(tunnelSX + tunnelW, tunnelSY, 12, tunnelH);
+      // Inner wall highlight
+      ctx.fillStyle = '#4a4030';
+      ctx.fillRect(tunnelSX - 4, tunnelSY, 4, tunnelH);
+      ctx.fillRect(tunnelSX + tunnelW, tunnelSY, 4, tunnelH);
+      // Cap the far end
+      ctx.fillStyle = '#2a2218';
+      ctx.fillRect(tunnelSX - 12, tunnelSY + tunnelH, tunnelW + 24, 10);
+      // Floor gradient into darkness
+      let floorGrad = ctx.createLinearGradient(0, tunnelSY, 0, tunnelSY + tunnelH);
+      floorGrad.addColorStop(0, 'rgba(40,30,20,0)');
+      floorGrad.addColorStop(1, 'rgba(10,6,2,0.85)');
+      ctx.fillStyle = floorGrad;
+      ctx.fillRect(tunnelSX, tunnelSY, tunnelW, tunnelH);
+    }
+
+    // Sealed boulder (also drawn while falling)
+    if (mineScene.sealed || mineScene.boulderFallTimer > 0) {
+      let bx = arenaSX;
+      let restY = arenaSY + arenaR + 4;
+      let by;
+      if (mineScene.boulderFallTimer > 0) {
+        let t = 1 - (mineScene.boulderFallTimer / mineScene.boulderFallMax);
+        t = t * t; // ease-in (gravity)
+        by = restY - 220 + 220 * t;
+      } else {
+        by = restY;
+      }
+      // Shadow on the tunnel floor
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.beginPath();
+      ctx.ellipse(bx, restY + BOULDER_RADIUS * 0.4, BOULDER_RADIUS * 1.05, BOULDER_RADIUS * 0.25, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Main stone body
+      ctx.fillStyle = '#5c5a54';
+      ctx.beginPath();
+      ctx.arc(bx, by, BOULDER_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#6e6c64';
+      ctx.beginPath();
+      ctx.arc(bx - 6, by - 6, BOULDER_RADIUS * 0.85, 0, Math.PI * 2);
+      ctx.fill();
+      // Cracks
+      ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(bx - 20, by - 10);
+      ctx.lineTo(bx - 6, by - 2);
+      ctx.lineTo(bx + 12, by - 14);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(bx - 14, by + 12);
+      ctx.lineTo(bx + 2, by + 6);
+      ctx.lineTo(bx + 18, by + 14);
+      ctx.stroke();
+      // Speckles
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      for (let p = 0; p < 8; p++) {
+        let ang = p * 0.78;
+        let rr = 10 + (p % 3) * 6;
+        ctx.beginPath();
+        ctx.arc(bx + Math.cos(ang) * rr, by + Math.sin(ang) * rr, 1.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // Highlight
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.beginPath();
+      ctx.ellipse(bx - 12, by - 14, 10, 5, -0.3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     // Gold veins on cave walls
     let t = frameNow;
     for (let i = 0; i < 16; i++) {
@@ -5402,12 +6242,44 @@ function draw() {
       ctx.fill();
     }
 
+    // Amber aurora radiating from the Amber Wolf
+    if (bossWolf && bossWolf.health > 0) {
+      let bsx = bossWolf.x - camX, bsy = bossWolf.y - camY;
+      let pulse = 0.5 + Math.sin(frameNow / 260) * 0.15;
+      let auroraR = 140 + Math.sin(frameNow / 320) * 12;
+      let grad = ctx.createRadialGradient(bsx, bsy, 8, bsx, bsy, auroraR);
+      grad.addColorStop(0, `rgba(255,210,100,${0.55 * pulse})`);
+      grad.addColorStop(0.4, `rgba(240,170,60,${0.32 * pulse})`);
+      grad.addColorStop(0.75, `rgba(200,130,40,${0.15 * pulse})`);
+      grad.addColorStop(1, 'rgba(120,80,20,0)');
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(bsx, bsy, auroraR, 0, Math.PI * 2);
+      ctx.fill();
+      // Inner flaring wisps
+      for (let i = 0; i < 5; i++) {
+        let a = frameNow / 600 + i * (Math.PI * 2 / 5);
+        let wr = auroraR * (0.6 + Math.sin(frameNow / 200 + i) * 0.15);
+        let wx = bsx + Math.cos(a) * wr;
+        let wy = bsy + Math.sin(a) * wr;
+        let wg = ctx.createRadialGradient(wx, wy, 0, wx, wy, 38);
+        wg.addColorStop(0, `rgba(255,225,140,${0.4 * pulse})`);
+        wg.addColorStop(1, 'rgba(255,200,80,0)');
+        ctx.fillStyle = wg;
+        ctx.beginPath();
+        ctx.arc(wx, wy, 38, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
     // Boss dash effects
     if (bossWolf && bossWolf.health > 0) {
-      // Dash trail - red afterimages
+      // Dash trail - amber afterimages
       for (let tr of bossWolf.dashTrail) {
         let alpha = tr.life / 10 * 0.5;
-        ctx.fillStyle = `rgba(255,60,30,${alpha})`;
+        ctx.fillStyle = `rgba(255,190,80,${alpha})`;
         ctx.beginPath();
         ctx.arc(tr.x - camX, tr.y - camY, 12, 0, Math.PI * 2);
         ctx.fill();
@@ -5416,16 +6288,16 @@ function draw() {
       if (bossWolf.dashWindup > 0 && !bossWolf.dashing) {
         let bsx = bossWolf.x - camX, bsy = bossWolf.y - camY;
         let intensity = 1 - (bossWolf.dashWindup / 40);
-        // Pulsing red ring around wolf
+        // Pulsing amber ring around wolf
         let pulseR = 15 + intensity * 10;
-        ctx.strokeStyle = `rgba(255,50,30,${0.3 + intensity * 0.5})`;
+        ctx.strokeStyle = `rgba(255,200,70,${0.35 + intensity * 0.5})`;
         ctx.lineWidth = 2 + intensity * 2;
         ctx.beginPath();
         ctx.arc(bsx, bsy, pulseR, 0, Math.PI * 2);
         ctx.stroke();
         // Direction indicator line
         let lineLen = 30 + intensity * 40;
-        ctx.strokeStyle = `rgba(255,80,40,${0.2 + intensity * 0.4})`;
+        ctx.strokeStyle = `rgba(255,220,100,${0.25 + intensity * 0.45})`;
         ctx.lineWidth = 3;
         ctx.setLineDash([4, 4]);
         ctx.beginPath();
@@ -5435,7 +6307,7 @@ function draw() {
         ctx.setLineDash([]);
         // "!" warning
         if (bossWolf.dashWindup < 20) {
-          ctx.fillStyle = '#ff3322';
+          ctx.fillStyle = '#ffcc33';
           ctx.font = 'bold 16px Arial';
           ctx.textAlign = 'center';
           ctx.fillText('!', bsx, bsy - 28);
@@ -5444,7 +6316,7 @@ function draw() {
       // Active dash - motion blur effect
       if (bossWolf.dashing) {
         let bsx = bossWolf.x - camX, bsy = bossWolf.y - camY;
-        ctx.strokeStyle = 'rgba(255,100,50,0.6)';
+        ctx.strokeStyle = 'rgba(255,210,110,0.65)';
         ctx.lineWidth = 4;
         ctx.lineCap = 'round';
         ctx.beginPath();
@@ -5473,7 +6345,7 @@ function draw() {
         let len = 14;
         let dx = Math.cos(sm.angle) * len;
         let dy = Math.sin(sm.angle) * len;
-        ctx.strokeStyle = `rgba(255,60,40,${alpha * 0.9})`;
+        ctx.strokeStyle = `rgba(255,200,80,${alpha * 0.9})`;
         ctx.lineWidth = 2.5;
         ctx.lineCap = 'round';
         ctx.beginPath();
@@ -5481,7 +6353,7 @@ function draw() {
         ctx.lineTo(sx + dx, sy + dy);
         ctx.stroke();
         // Glow
-        ctx.strokeStyle = `rgba(255,120,80,${alpha * 0.4})`;
+        ctx.strokeStyle = `rgba(255,230,140,${alpha * 0.45})`;
         ctx.lineWidth = 5;
         ctx.beginPath();
         ctx.moveTo(sx - dx, sy - dy);
@@ -5490,24 +6362,57 @@ function draw() {
       }
     }
 
+    // Crumble rubble mound where the boss fell
+    if (mineScene.crumbleTimer > 0) {
+      let cxs = mineScene.crumbleX - camX;
+      let cys = mineScene.crumbleY - camY;
+      let crumblePct = mineScene.crumbleTimer / 70;
+      let rr = mineScene.crumbleS * 0.5 * crumblePct;
+      if (rr > 2) {
+        ctx.fillStyle = `rgba(58,58,66,${0.6 * crumblePct})`;
+        ctx.beginPath();
+        ctx.ellipse(cxs, cys, rr * 1.2, rr * 0.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = `rgba(107,107,116,${0.7 * crumblePct})`;
+        ctx.beginPath();
+        ctx.ellipse(cxs, cys - rr * 0.15, rr, rr * 0.4, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // Stone-dust particles (spawn puffs + crumble debris)
+    for (const pp of mineScene.particles) {
+      let alpha = Math.min(pp.life / 25, 1);
+      ctx.fillStyle = `rgba(${pp.shade},${pp.shade},${pp.shade + 8},${alpha})`;
+      ctx.beginPath();
+      ctx.arc(pp.x - camX, pp.y - camY, pp.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     // "BOSS" label
     if (bossWolf && bossWolf.health > 0) {
       // Boss health bar at top of screen
       let bhbW = 200, bhbH = 14;
       let bhbX = canvas.width / 2 - bhbW / 2, bhbY = 30;
+      let flashP = bossBarFlash / 45;
       ctx.fillStyle = 'rgba(0,0,0,0.7)';
       ctx.fillRect(bhbX - 4, bhbY - 20, bhbW + 8, bhbH + 26);
-      ctx.fillStyle = '#cc3333';
+      // Enrage flash overlay
+      if (flashP > 0) {
+        ctx.fillStyle = `rgba(255,200,70,${flashP * 0.7})`;
+        ctx.fillRect(bhbX - 4, bhbY - 20, bhbW + 8, bhbH + 26);
+      }
+      ctx.fillStyle = flashP > 0 ? '#fff5b0' : '#f5c040';
       ctx.font = 'bold 12px Arial';
       ctx.textAlign = 'center';
-      ctx.fillText('ALPHA WOLF', canvas.width / 2, bhbY - 6);
-      ctx.fillStyle = '#333';
+      ctx.fillText('AMBER WOLF', canvas.width / 2, bhbY - 6);
+      ctx.fillStyle = '#332a10';
       ctx.fillRect(bhbX, bhbY, bhbW, bhbH);
       let bossPct = bossWolf.health / bossWolf.maxHealth;
-      ctx.fillStyle = bossPct > 0.5 ? '#cc2222' : bossPct > 0.25 ? '#cc6600' : '#ff2222';
+      ctx.fillStyle = bossPct > 0.5 ? '#f5b020' : bossPct > 0.25 ? '#f08030' : '#ffcc40';
       ctx.fillRect(bhbX, bhbY, bhbW * bossPct, bhbH);
-      ctx.strokeStyle = '#888';
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = flashP > 0 ? '#ffdd55' : '#888';
+      ctx.lineWidth = flashP > 0 ? 2 : 1;
       ctx.strokeRect(bhbX, bhbY, bhbW, bhbH);
     }
 
@@ -5767,7 +6672,7 @@ function draw() {
     ctx.fillStyle = '#ddd';
     ctx.font = '18px Arial';
     let rescued = crashSites.filter(s => s.rescued).reduce((sum, s) => sum + s.survivors, 0);
-    ctx.fillText(`Survivors Rescued: ${rescued} / ${totalSurvivors}`, canvas.width/2, canvas.height/2 + 10);
+    ctx.fillText(`Lost Explorers Found: ${rescued} / ${totalSurvivors}`, canvas.width/2, canvas.height/2 + 10);
     ctx.fillText(`Village Population: ${village.population}`, canvas.width/2, canvas.height/2 + 35);
 
     // Restart prompt
@@ -5788,7 +6693,7 @@ function saveGame() {
     wolves: wolves.map(w => ({ x: w.x, y: w.y, health: w.health, maxHealth: w.maxHealth, pack: w.pack, isAlpha: w.isAlpha, speed: w.speed })),
     inventory: { slots: inventory.slots, selected: inventory.selected },
     worldItems: worldItems.map(i => ({ collected: i.collected })),
-    villagePeople: villagePeople.map(vp => ({ x: vp.x, y: vp.y, color: vp.color, wanderAngle: vp.wanderAngle, hasQuest: vp.hasQuest || false })),
+    villagePeople: villagePeople.map(vp => ({ x: vp.x, y: vp.y, color: vp.color, wanderAngle: vp.wanderAngle, hasQuest: vp.hasQuest || false, explorer: vp.explorer })),
     speedBoostTimer: speedBoostTimer,
     shieldActive: shieldActive,
     watchtowerJobs: { lookout: watchtowerJobs.lookout.assigned, scout: watchtowerJobs.scout.assigned, archer: watchtowerJobs.archer.assigned },
@@ -5837,7 +6742,7 @@ function loadGame() {
     }
     villagePeople.length = 0;
     for (const vp of save.villagePeople) {
-      villagePeople.push({ x: vp.x, y: vp.y, color: vp.color, wanderAngle: vp.wanderAngle, hasQuest: vp.hasQuest || false });
+      villagePeople.push({ x: vp.x, y: vp.y, color: vp.color, wanderAngle: vp.wanderAngle, hasQuest: vp.hasQuest || false, explorer: vp.explorer || makeExplorerStyle() });
     }
     speedBoostTimer = save.speedBoostTimer || 0;
     shieldActive = save.shieldActive || false;
@@ -5971,7 +6876,7 @@ function drawMainMenu() {
   // Tips system
   const menuTips = [
     'Watch out for wolf packs!',
-    'Rescue survivors and bring\nthem back to the village.',
+    'Find lost explorers and bring\nthem back to the village.',
     'Use the whip to fend\noff wolves.',
     'Village NPCs may have\nquests for you.',
     'Pick up items near\ncrash sites.',
@@ -6763,12 +7668,99 @@ requestAnimationFrame(gameLoop);
 // --- DEBUG PANEL ---
 const debugPanel = document.getElementById('debug-panel');
 const debugQuests = document.getElementById('debug-quests');
+const debugLock = document.getElementById('debug-lock');
+const debugPassBoxes = document.getElementById('debug-pass-boxes');
+const debugPassError = document.getElementById('debug-pass-error');
+const DEBUG_PASSCODE = 'Bluebird89';
+const DEBUG_MAX_TRIES = 4;
 let debugOpen = false;
+let debugUnlocked = false;
+let debugTriesLeft = DEBUG_MAX_TRIES;
+let debugLockedOut = false;
+
+// Build the 10 single-character passcode inputs
+const debugPassInputs = [];
+for (let i = 0; i < DEBUG_PASSCODE.length; i++) {
+  const inp = document.createElement('input');
+  inp.type = 'text';
+  inp.maxLength = 1;
+  inp.autocomplete = 'off';
+  inp.style.cssText = 'width:22px;height:26px;text-align:center;font:bold 14px monospace;background:#222;color:#ffcc44;border:1px solid #886a20;border-radius:3px;padding:0;';
+  inp.addEventListener('input', () => {
+    if (inp.value.length > 0 && i < debugPassInputs.length - 1) {
+      debugPassInputs[i + 1].focus();
+    }
+    // If all filled, check
+    if (debugPassInputs.every(b => b.value.length > 0)) {
+      let entered = debugPassInputs.map(b => b.value).join('');
+      if (entered === DEBUG_PASSCODE) {
+        debugUnlocked = true;
+        debugLock.style.display = 'none';
+        debugQuests.style.display = 'block';
+        debugPassError.textContent = '';
+        updateDebugPanel();
+      } else {
+        debugTriesLeft--;
+        if (debugTriesLeft <= 0) {
+          debugLockedOut = true;
+          debugPassError.textContent = 'Locked out.';
+          debugPassInputs.forEach(b => { b.value = ''; b.disabled = true; b.style.borderColor = '#ff4444'; b.style.background = '#1a0808'; });
+        } else {
+          debugPassError.textContent = `Incorrect passcode — ${debugTriesLeft} tr${debugTriesLeft === 1 ? 'y' : 'ies'} left`;
+          debugPassInputs.forEach(b => { b.value = ''; b.style.borderColor = '#ff4444'; });
+          setTimeout(() => debugPassInputs.forEach(b => b.style.borderColor = '#886a20'), 600);
+          debugPassInputs[0].focus();
+        }
+      }
+    }
+  });
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Backspace' && inp.value.length === 0 && i > 0) {
+      debugPassInputs[i - 1].focus();
+      debugPassInputs[i - 1].value = '';
+      e.preventDefault();
+    } else if (e.key === 'ArrowLeft' && i > 0) {
+      debugPassInputs[i - 1].focus();
+    } else if (e.key === 'ArrowRight' && i < debugPassInputs.length - 1) {
+      debugPassInputs[i + 1].focus();
+    } else if (e.key === '`') {
+      e.preventDefault();
+      toggleDebug();
+    }
+  });
+  inp.addEventListener('paste', e => {
+    e.preventDefault();
+    let pasted = (e.clipboardData || window.clipboardData).getData('text').slice(0, DEBUG_PASSCODE.length);
+    for (let j = 0; j < pasted.length && i + j < debugPassInputs.length; j++) {
+      debugPassInputs[i + j].value = pasted[j];
+    }
+    debugPassInputs[Math.min(i + pasted.length, debugPassInputs.length - 1)].focus();
+    debugPassInputs[debugPassInputs.length - 1].dispatchEvent(new Event('input'));
+  });
+  debugPassBoxes.appendChild(inp);
+  debugPassInputs.push(inp);
+}
 
 function toggleDebug() {
   debugOpen = !debugOpen;
   debugPanel.style.display = debugOpen ? 'block' : 'none';
-  if (debugOpen) updateDebugPanel();
+  if (debugOpen) {
+    if (debugUnlocked) {
+      debugLock.style.display = 'none';
+      debugQuests.style.display = 'block';
+      updateDebugPanel();
+    } else {
+      debugLock.style.display = 'block';
+      debugQuests.style.display = 'none';
+      if (debugLockedOut) {
+        debugPassError.textContent = 'Locked out.';
+      } else {
+        debugPassError.textContent = '';
+        debugPassInputs.forEach(b => b.value = '');
+        setTimeout(() => debugPassInputs[0].focus(), 0);
+      }
+    }
+  }
 }
 
 document.getElementById('debug-close').addEventListener('click', toggleDebug);
@@ -6777,12 +7769,12 @@ window.addEventListener('keydown', e => {
 });
 
 function updateDebugPanel() {
-  if (!debugOpen) return;
+  if (!debugOpen || !debugUnlocked) return;
   let rescued = village.population;
   let sideComplete = activeQuests.filter(q => q.turned_in).length;
   let quests = [
     {
-      name: '1. Rescue All Survivors',
+      name: '1. Find All Lost Explorers',
       done: rescued >= totalSurvivors && totalSurvivors > 0,
       status: `${rescued}/${totalSurvivors}`,
       action: () => {
@@ -6802,6 +7794,7 @@ function updateDebugPanel() {
             x: village.x + 20 + Math.random() * (village.w - 40),
             y: village.y + 20 + Math.random() * (village.h - 40),
             color: ['#c51111','#132ed1','#117f2d','#ed54ba','#ef7d0e','#f5f557'][Math.floor(Math.random()*6)],
+            explorer: makeExplorerStyle(),
             wanderAngle: Math.random() * Math.PI * 2,
             hasQuest: false
           });
