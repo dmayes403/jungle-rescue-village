@@ -1,5 +1,6 @@
 
 <!DOCTYPE html>
+
 <html>
 <head>
 <title>Jungle Rescue Village</title>
@@ -33,12 +34,19 @@
     box-shadow: inset 0 2px 4px rgba(0,0,0,0.5), 0 1px 2px rgba(0,0,0,0.4);
     padding: 8px 14px 6px 14px;
   }
+  #pause-btn, #mute-btn { width: 34px; height: 32px; padding: 0; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; }
+  #pause-btn:active, #mute-btn:active { padding: 0; }
   #pause-btn { right: 10px; z-index: 100; }
-  #fs-btn { right: 52px; }
-  #save-btn { right: 96px; z-index: 100; }
+  #mute-btn { right: 52px; z-index: 100; }
+  #fs-btn { right: 94px; }
+  #save-btn { right: 138px; z-index: 100; }
   #pause-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 5; }
-  #pause-overlay.active { display: flex; }
+  #pause-overlay.active { display: flex; flex-direction: column; gap: 20px; }
   #pause-text { color: #fff; font-family: Arial; font-size: 48px; text-shadow: 2px 2px 4px #000; }
+  #pause-menu { display: flex; flex-direction: column; align-items: center; gap: 10px; background: rgba(0,0,0,0.45); padding: 18px 28px; border-radius: 10px; border: 1px solid rgba(255,220,120,0.4); }
+  #pause-menu label { color: #ffe08a; font-family: Arial; font-size: 14px; }
+  #pause-menu input[type=range] { width: 220px; accent-color: #ffd84a; }
+  #pause-menu .hint { color: #ccc; font-family: Arial; font-size: 11px; }
   :fullscreen { background: #000; }
   :fullscreen #game-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; background: #000; margin: 0; padding: 0; }
   :fullscreen canvas { margin: 0; }
@@ -55,6 +63,16 @@
   /* Play icon (for resume state) */
   .play-icon { display: inline-block; width: 0; height: 0; border-style: solid; border-width: 7px 0 7px 11px; border-color: transparent transparent transparent #f0e8d0; }
   .game-btn:hover .play-icon { border-left-color: #fff; }
+
+  /* Classic speaker icon (inline SVG) with sound waves or a red slash when muted */
+  .speaker-svg { display: block; width: 18px; height: 14px; }
+  .speaker-svg .speaker-body { fill: #f0e8d0; }
+  .speaker-svg .wave { stroke: #f0e8d0; stroke-width: 1.6; stroke-linecap: round; fill: none; }
+  .speaker-svg .slash { stroke: #ff5a3a; stroke-width: 2.2; stroke-linecap: round; display: none; }
+  .game-btn:hover .speaker-svg .speaker-body { fill: #fff; }
+  .game-btn:hover .speaker-svg .wave { stroke: #fff; }
+  .speaker-svg.muted .wave { display: none; }
+  .speaker-svg.muted .slash { display: inline; }
 
   /* Fullscreen icon - four disconnected corners */
   .fs-icon { display: inline-grid; grid-template-columns: 1fr 1fr; gap: 4px; width: 16px; height: 14px; }
@@ -92,6 +110,7 @@
     #fs-btn { display: none !important; }
     #save-btn { right: auto; left: 10px; transform: none; top: 10px; padding: 0; font-size: 11px; line-height: 1.2; text-align: center; width: 62px; height: 40px; box-sizing: border-box; display: flex; justify-content: center; align-items: center; }
     #pause-btn { right: auto; left: 78px; top: 10px; padding: 0; width: 40px; height: 40px; box-sizing: border-box; display: flex; justify-content: center; align-items: center; }
+    #mute-btn { right: auto; left: 44px; top: 58px; padding: 0; width: 40px; height: 40px; box-sizing: border-box; display: flex; justify-content: center; align-items: center; }
   }
   @media (max-width: 1024px) and (pointer: coarse) and (orientation: portrait) {
     #rotate-prompt { display: flex; }
@@ -104,6 +123,7 @@
 <div id="game-container">
 <div id="ui" style="display:none"><span id="rescued">0</span><span id="total">0</span><span id="village">0</span></div>
 <button id="pause-btn" class="game-btn icon-btn" title="Pause" style="display:none"><span class="pause-icon"><span></span><span></span></span></button>
+<button id="mute-btn" class="game-btn icon-btn" title="Mute music" style="display:none"><svg class="speaker-svg" viewBox="0 0 22 18"><path class="speaker-body" d="M1 6 L5 6 L11 1 L11 17 L5 12 L1 12 Z"/><path class="wave" d="M13.5 6.2 Q15.8 9 13.5 11.8"/><path class="wave" d="M15.8 4 Q19.5 9 15.8 14"/><line class="slash" x1="12" y1="3" x2="21" y2="15"/></svg></button>
 <button id="fs-btn" class="game-btn icon-btn" title="Fullscreen" style="display:none"><span class="fs-icon"><span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span></span></button>
 <button id="save-btn" class="game-btn" style="display:none">Save & Quit</button>
 <div id="debug-panel" style="display:none;position:absolute;top:10px;left:10px;z-index:999;background:rgba(0,0,0,0.85);border:2px solid #ffaa00;border-radius:8px;padding:12px;color:#fff;font:13px monospace;min-width:220px;pointer-events:auto;">
@@ -115,7 +135,14 @@
   </div>
   <div id="debug-quests" style="display:none;"></div>
 </div>
-<div id="pause-overlay"><span id="pause-text">PAUSED</span></div>
+<div id="pause-overlay">
+  <span id="pause-text">PAUSED</span>
+  <div id="pause-menu">
+    <label for="vol-slider">Music Volume</label>
+    <input id="vol-slider" type="range" min="0" max="100" step="1" value="100">
+    <span class="hint">Press P to resume · M to mute</span>
+  </div>
+</div>
 <canvas id="game"></canvas>
 </div>
 <div id="mobile-controls">
@@ -598,6 +625,45 @@ for (let p = 0; p < 2; p++) {
   }
 }
 
+// Amber Golems — slow, tanky guardians drawn to the corrupted amber near the mine
+const GOLEM_DETECT = 230;
+const GOLEM_ATTACK = 48;
+const golems = [];
+(function spawnGolems() {
+  const count = 2 + Math.floor(Math.random() * 2); // 2 or 3
+  for (let i = 0; i < count; i++) {
+    let gx, gy, tries = 0;
+    do {
+      // Ring around the mine: 180–320px out
+      const ang = Math.random() * Math.PI * 2;
+      const rad = 180 + Math.random() * 140;
+      gx = mine.x + Math.cos(ang) * rad;
+      gy = mine.y + Math.sin(ang) * rad;
+      tries++;
+    } while (tries < 40 && (
+      gx < BORDER + 40 || gx > WORLD_W - BORDER - 40 ||
+      gy < BORDER + 40 || gy > WORLD_H - BORDER - 40 ||
+      nearRiver(gx, gy, RIVER_WIDTH + 15) ||
+      golems.some(g => Math.hypot(g.x - gx, g.y - gy) < 120)
+    ));
+    golems.push({
+      x: gx, y: gy,
+      angle: Math.random() * Math.PI * 2,
+      speed: 0.55,
+      state: 'idle',
+      attackTimer: 0,
+      windupTimer: 0,
+      facing: 'right',
+      health: 7,
+      maxHealth: 7,
+      hurtTimer: 0,
+      walkBob: Math.random() * Math.PI * 2,
+      // Shards puff up when hit
+      shards: []
+    });
+  }
+})();
+
 // Player health
 player.health = 10;
 player.maxHealth = 10;
@@ -666,6 +732,78 @@ let wolfKillCount = 0; // track total wolf kills for quest progress
 // Count total survivors
 let totalSurvivors = crashSites.reduce((sum, s) => sum + s.survivors, 0);
 document.getElementById('total').textContent = totalSurvivors;
+
+// Spawn fresh crash sites totalling `needed` survivors (for late-game rescue quests)
+function spawnCrashSitesForQuest(needed) {
+  const types = ['campsite', 'plane', 'helicopter'];
+  let remaining = Math.max(1, needed);
+  let added = 0;
+  while (remaining > 0) {
+    const survCount = Math.min(remaining, 1 + Math.floor(Math.random() * 3));
+    let cx, cy, tries = 0;
+    do {
+      cx = 150 + Math.random() * (WORLD_W - 300);
+      cy = 150 + Math.random() * (WORLD_H - 300);
+      tries++;
+    } while (tries < 60 && (
+      (Math.abs(cx - WORLD_W/2) < 200 && Math.abs(cy - WORLD_H/2) < 200) ||
+      nearRiver(cx, cy, RIVER_WIDTH + 15) ||
+      Math.hypot(cx - mine.x, cy - mine.y) < 200 ||
+      Math.hypot(cx - village.x - village.w/2, cy - village.y - village.h/2) < 220 ||
+      crashSites.some(s => Math.hypot(s.x - cx, s.y - cy) < 140)
+    ));
+    const type = types[Math.floor(Math.random() * types.length)];
+    crashSites.push({
+      x: cx, y: cy,
+      type: type,
+      survivors: survCount,
+      rescued: false,
+      smoke: [],
+      campStyle: type === 'campsite' ? {
+        tentTilt: (Math.random() - 0.5) * 0.08,
+        backTilt: -0.25 - Math.random() * 0.25,
+        flagWave: Math.random() * 6,
+        explorer: {
+          hat: EXPLORER_HAT_TYPES[Math.floor(Math.random() * EXPLORER_HAT_TYPES.length)],
+          hatColor: EXPLORER_HAT_COLORS[Math.floor(Math.random() * EXPLORER_HAT_COLORS.length)],
+          hair: EXPLORER_HAIR_COLORS[Math.floor(Math.random() * EXPLORER_HAIR_COLORS.length)],
+          color: ['#c51111','#132ed1','#117f2d','#ed54ba','#ef7d0e','#f5f557','#3f474e','#6b2fbb','#71491e','#38fedb'][Math.floor(Math.random() * 10)]
+        }
+      } : null
+    });
+    remaining -= survCount;
+    added++;
+  }
+  totalSurvivors = crashSites.reduce((sum, s) => sum + s.survivors, 0);
+  document.getElementById('total').textContent = totalSurvivors;
+  return added;
+}
+
+// First-time tutorial — queues a short series of intro notifications.
+// Gated by localStorage so returning players aren't re-tutorialized.
+function runTutorialIfNew() {
+  try {
+    if (localStorage.getItem('jrv_tutorial_shown') === '1') return;
+    localStorage.setItem('jrv_tutorial_shown', '1');
+  } catch (e) {}
+  const mobile = ('ontouchstart' in window) && window.matchMedia('(pointer: coarse)').matches;
+  const steps = mobile ? [
+    'Welcome to Jungle Rescue Village!',
+    'Use the joystick to move around the jungle.',
+    'Tap the whip button to attack wolves.',
+    'Walk up to a crash site to rescue its explorers.',
+    'Lead rescued explorers home to grow your village.',
+    'Tap the quest book to track tasks. Good luck!'
+  ] : [
+    'Welcome to Jungle Rescue Village!',
+    'Move with WASD or arrow keys.',
+    'Press F to whip attack wolves.',
+    'Walk up to a crash site to rescue its explorers.',
+    'Lead rescued explorers home to grow your village.',
+    'Press Q for quests, 1-5 to use items. Good luck!'
+  ];
+  for (const msg of steps) notify(msg);
+}
 
 // Followers (rescued people following the player)
 const followers = [];
@@ -1423,6 +1561,21 @@ window.addEventListener('keyup', e => { keys[e.key] = false; });
 // Notification system
 let notification = '';
 let notifyTimer = 0;
+const notifyQueue = [];
+
+// Floating damage numbers
+const dmgFloaters = [];
+function spawnFloater(x, y, text, color) {
+  dmgFloaters.push({ x, y, text: String(text), color: color || '#fff', life: 50, vy: -1.3 });
+}
+
+// Full-screen flash for hits and phase transitions
+let screenFlash = 0;
+let screenFlashColor = '255,80,80';
+function triggerFlash(rgb, strength) {
+  screenFlash = Math.max(screenFlash, strength || 0.4);
+  screenFlashColor = rgb || '255,80,80';
+}
 let helpYellTriggered = false;
 let helpYellActive = false;
 let helpYellX = 0;
@@ -1470,8 +1623,15 @@ const troubledPerson = {
 };
 const TROUBLED_PACK_ID = 99;
 function notify(msg) {
-  notification = msg;
-  notifyTimer = 180; // 3 seconds at 60fps
+  // Drop consecutive duplicates to avoid spam
+  if (notification === msg && notifyTimer > 0) return;
+  if (notifyQueue.length && notifyQueue[notifyQueue.length - 1] === msg) return;
+  if (notifyTimer > 0 && notification) {
+    notifyQueue.push(msg);
+  } else {
+    notification = msg;
+    notifyTimer = 180;
+  }
 }
 
 // Wolf collision check
@@ -1526,6 +1686,7 @@ window.addEventListener('keydown', e => {
       if (dist < 25) {
         // Damage and knock wolf back
         wolf.health--;
+        spawnFloater(wolf.x, wolf.y - 20, '-1', '#ffdd55');
         let kbAngle = Math.atan2(wolf.y - player.y, wolf.x - player.x);
         wolf.x += Math.cos(kbAngle) * 40;
         wolf.y += Math.sin(kbAngle) * 40;
@@ -1533,6 +1694,26 @@ window.addEventListener('keydown', e => {
         wolf.y = Math.max(BORDER, Math.min(WORLD_H - BORDER, wolf.y));
         wolf.state = 'wander';
         wolf.angle = kbAngle;
+      }
+    }
+    // Whip hits amber golems — no knockback (too heavy), small resin-chip effect
+    for (const g of golems) {
+      const wdx = whip.endX - whip.x;
+      const wdy = whip.endY - whip.y;
+      const len2 = wdx * wdx + wdy * wdy;
+      const t = Math.max(0, Math.min(1, ((g.x - whip.x) * wdx + (g.y - whip.y) * wdy) / len2));
+      const projX = whip.x + t * wdx;
+      const projY = whip.y + t * wdy;
+      if (Math.hypot(g.x - projX, g.y - projY) < 30 && g.hurtTimer <= 0) {
+        g.health--;
+        g.hurtTimer = 14;
+        spawnFloater(g.x, g.y - 28, '-1', '#ffb055');
+        // Chip shards
+        for (let k = 0; k < 6; k++) {
+          const a = Math.random() * Math.PI * 2;
+          const sp = 1 + Math.random() * 2;
+          g.shards.push({ x: g.x + (Math.random() - 0.5) * 12, y: g.y + (Math.random() - 0.5) * 20, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 1, life: 18 + Math.floor(Math.random() * 8) });
+        }
       }
     }
   }
@@ -1602,6 +1783,14 @@ function update() {
         newY < BORDER || newY > WORLD_H - BORDER)) {
       blocked = true;
     }
+    // Mine rock-face collision — solid mountain with an arched entrance at the base
+    if (!blocked) {
+      const mdx = newX - mine.x;
+      const mdy = newY - mine.y;
+      const insideMtn = (mdx * mdx) / (50 * 50) + ((mdy + 18) * (mdy + 18)) / (40 * 40) < 1;
+      const inEntrance = Math.abs(mdx) < 16 && mdy > -10;
+      if (insideMtn && !inEntrance) blocked = true;
+    }
   }
 
   if (!blocked) {
@@ -1650,6 +1839,13 @@ function update() {
     shakeTimer--;
   }
   if (bossBarFlash > 0) bossBarFlash--;
+
+  // Swap music between exploration and boss fight
+  if (musicCtx) {
+    let inBossFight = mineScene.active && mineScene.phase === 'boss' && mineScene.introTriggered && !gameWon && !gameOver;
+    if (inBossFight && currentMusicTrack !== 'boss') startMusicTrack('boss');
+    else if (!inBossFight && currentMusicTrack !== 'explore') startMusicTrack('explore');
+  }
 
   // Check crash sites
   for (const site of crashSites) {
@@ -1774,6 +1970,22 @@ function update() {
   if (mineScene.active && mineScene.phase === 'boss') {
     if (mineScene.fadeIn > 0) mineScene.fadeIn--;
     let arenaR = 250;
+    // Evict any non-boss wolves that wandered into the arena
+    const evictBuffer = arenaR + 80;
+    for (const w of wolves) {
+      if (w.pack === BOSS_PACK_ID || w.bossMinion) continue;
+      const wdx = w.x - mine.x, wdy = w.y - mine.y;
+      const wdist = Math.hypot(wdx, wdy);
+      if (wdist < evictBuffer) {
+        const ang = wdist > 0.01 ? Math.atan2(wdy, wdx) : Math.random() * Math.PI * 2;
+        w.x = mine.x + Math.cos(ang) * (evictBuffer + 20);
+        w.y = mine.y + Math.sin(ang) * (evictBuffer + 20);
+        w.x = Math.max(BORDER, Math.min(WORLD_W - BORDER, w.x));
+        w.y = Math.max(BORDER, Math.min(WORLD_H - BORDER, w.y));
+        w.state = 'wander';
+        w.attackTimer = 0;
+      }
+    }
     // Confine player — allow the tunnel to the south while unsealed
     let pdx = player.x - mine.x, pdy = player.y - mine.y;
     let pdist = Math.hypot(pdx, pdy);
@@ -1792,6 +2004,8 @@ function update() {
       mineScene.introTimer = 360;
       mineScene.introMax = 360;
       mineScene.introTriggered = true;
+      playBossStinger();
+      triggerFlash('255,255,255', 0.6);
     }
     if (mineScene.boulderFallTimer > 0) {
       mineScene.boulderFallTimer--;
@@ -1995,6 +2209,7 @@ function update() {
         let projY = troubledPerson.whip.y + t * wpy;
         if (Math.hypot(bossWolf.x - projX, bossWolf.y - projY) < 22) {
           bossWolf.health--;
+          spawnFloater(bossWolf.x, bossWolf.y - 30, '-1', '#ffdd55');
           let kbAngle = Math.atan2(bossWolf.y - troubledPerson.y, bossWolf.x - troubledPerson.x);
           bossWolf.x += Math.cos(kbAngle) * 20;
           bossWolf.y += Math.sin(kbAngle) * 20;
@@ -2055,6 +2270,9 @@ function update() {
             notify('Shield blocked the dash!');
           } else {
             player.health -= 2;
+            spawnFloater(player.x, player.y - 20, '-2', '#ff5555');
+            triggerFlash('255,80,80', 0.55);
+            triggerShake(16, 5);
           }
           player.hurtTimer = 30;
           player.invincible = 60;
@@ -2135,6 +2353,9 @@ function update() {
                 notify('Shield blocked the scratch!');
               } else {
                 player.health--;
+                spawnFloater(player.x, player.y - 20, '-1', '#ff5555');
+                triggerFlash('255,80,80', 0.4);
+                triggerShake(10, 3);
               }
               player.hurtTimer = 30;
               player.invincible = 40;
@@ -2228,6 +2449,8 @@ function update() {
               notify('Shield blocked the amber!');
             } else {
               player.health--;
+              spawnFloater(player.x, player.y - 20, '-1', '#ff5555');
+              triggerFlash('255,120,60', 0.45);
             }
             player.hurtTimer = 30;
             player.invincible = 60;
@@ -2392,6 +2615,12 @@ function update() {
         let tmpl = QUEST_TEMPLATES[Math.floor(Math.random() * QUEST_TEMPLATES.length)];
         let need = tmpl.min + Math.floor(Math.random() * (tmpl.max - tmpl.min + 1));
         let desc = tmpl.desc.replace('{n}', need);
+        // If a "rescue more survivors" quest lands and every existing site is
+        // already rescued, seed fresh crash sites with exactly `need` survivors
+        if (tmpl.type === 'rescue_survivors' && crashSites.every(s => s.rescued)) {
+          spawnCrashSitesForQuest(need);
+          notify('New distress signals detected in the jungle!');
+        }
         activeQuests.push({
           id: questIdCounter++,
           giver: vpIdx,
@@ -2528,6 +2757,22 @@ function update() {
   }
 
   if (notifyTimer > 0) notifyTimer--;
+  if (notifyTimer === 0 && notifyQueue.length > 0) {
+    notification = notifyQueue.shift();
+    notifyTimer = 180;
+  }
+
+  // Tick damage floaters
+  for (let i = dmgFloaters.length - 1; i >= 0; i--) {
+    const f = dmgFloaters[i];
+    f.y += f.vy;
+    f.vy *= 0.94;
+    f.life--;
+    if (f.life <= 0) dmgFloaters.splice(i, 1);
+  }
+
+  // Fade screen flash
+  if (screenFlash > 0) screenFlash = Math.max(0, screenFlash - 0.03);
 
   // Item pickup
   for (const item of worldItems) {
@@ -2580,6 +2825,12 @@ function update() {
   for (const wolf of wolves) {
     // Freeze boss-pack wolves until the player enters the arena and the intro finishes
     if (wolf.pack === BOSS_PACK_ID && _bossFrozen) continue;
+    // Stunned wolves cannot move or attack
+    if (wolf.stunned) {
+      wolf.state = 'idle';
+      if (wolf.attackTimer > 0) wolf.attackTimer--;
+      continue;
+    }
     // Retreating quest wolves flee and disappear
     if (wolf.retreating) {
       let fleeFromX = troubledPerson.active ? troubledPerson.x : player.x;
@@ -2669,6 +2920,9 @@ function update() {
           notify('Shield blocked the attack!');
         } else {
           player.health--;
+          spawnFloater(player.x, player.y - 20, '-1', '#ff5555');
+          triggerFlash('255,80,80', 0.4);
+          triggerShake(8, 3);
         }
         player.hurtTimer = 30;
         player.invincible = 60;
@@ -2787,6 +3041,7 @@ function update() {
     for (const wolf of wolves) {
       if (Math.hypot(a.x - wolf.x, a.y - wolf.y) < 15) {
         wolf.health--;
+        spawnFloater(wolf.x, wolf.y - 20, '-1', '#ffdd55');
         arrows.splice(i, 1);
         break;
       }
@@ -2813,8 +3068,117 @@ function update() {
     }
   }
 
-  // Advance walk animation
-  if (dx !== 0 || dy !== 0) walkTimer++;
+  // --- AMBER GOLEMS ---
+  const _inBossArena = mineScene.active && (mineScene.phase === 'boss' || mineScene.phase === 'victory' || mineScene.phase === 'victory_fade');
+  for (const g of golems) {
+    if (g.hurtTimer > 0) g.hurtTimer--;
+    // Shard particles
+    for (let i = g.shards.length - 1; i >= 0; i--) {
+      const sh = g.shards[i];
+      sh.x += sh.vx; sh.y += sh.vy;
+      sh.vy += 0.18;
+      sh.life--;
+      if (sh.life <= 0) g.shards.splice(i, 1);
+    }
+    // Evict from boss arena if fight is active
+    if (_inBossArena) {
+      const mdx = g.x - mine.x, mdy = g.y - mine.y;
+      const mdist = Math.hypot(mdx, mdy);
+      if (mdist < 330) {
+        const ang = mdist > 0.01 ? Math.atan2(mdy, mdx) : Math.random() * Math.PI * 2;
+        g.x = mine.x + Math.cos(ang) * 360;
+        g.y = mine.y + Math.sin(ang) * 360;
+        g.x = Math.max(BORDER, Math.min(WORLD_W - BORDER, g.x));
+        g.y = Math.max(BORDER, Math.min(WORLD_H - BORDER, g.y));
+        g.state = 'idle';
+        g.attackTimer = 0;
+        g.windupTimer = 0;
+      }
+      continue;
+    }
+    if (g.attackTimer > 0) g.attackTimer--;
+    const pdxg = player.x - g.x;
+    const pdyg = player.y - g.y;
+    const pdist = Math.hypot(pdxg, pdyg);
+    // Attack windup → slam
+    if (g.windupTimer > 0) {
+      g.windupTimer--;
+      if (g.windupTimer === 0) {
+        // Slam: check player within AoE at impact moment
+        if (pdist < GOLEM_ATTACK + 8 && player.invincible <= 0) {
+          if (shieldActive) {
+            shieldActive = false;
+            notify('Shield blocked the slam!');
+          } else {
+            player.health -= 2;
+            spawnFloater(player.x, player.y - 20, '-2', '#ff5555');
+            triggerFlash('255,140,60', 0.55);
+            triggerShake(18, 5);
+          }
+          player.hurtTimer = 30;
+          player.invincible = 60;
+          const kbAng = Math.atan2(player.y - g.y, player.x - g.x);
+          player.x += Math.cos(kbAng) * 22;
+          player.y += Math.sin(kbAng) * 22;
+          player.x = Math.max(BORDER, Math.min(WORLD_W - BORDER, player.x));
+          player.y = Math.max(BORDER, Math.min(WORLD_H - BORDER, player.y));
+          if (player.health <= 0) killPlayer('An amber golem crushed you.');
+        }
+        // Throw shards outward from the slam point
+        for (let k = 0; k < 10; k++) {
+          const a = Math.random() * Math.PI * 2;
+          const sp = 1.2 + Math.random() * 2.2;
+          g.shards.push({ x: g.x, y: g.y + 6, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 1.5, life: 24 + Math.floor(Math.random() * 10) });
+        }
+        g.attackTimer = 80; // cooldown
+      }
+    } else if (pdist < GOLEM_ATTACK && g.attackTimer === 0 && player.invincible <= 0) {
+      g.state = 'attack';
+      g.windupTimer = 38;
+      g.angle = Math.atan2(pdyg, pdxg);
+    } else if (pdist < GOLEM_DETECT) {
+      g.state = 'chase';
+      // Lumber toward player
+      const ang = Math.atan2(pdyg, pdxg);
+      g.angle = ang;
+      g.walkBob += 0.14;
+      const step = g.speed;
+      const nx = g.x + Math.cos(ang) * step;
+      const ny = g.y + Math.sin(ang) * step;
+      // Stay out of mine mountain footprint
+      const mdx = nx - mine.x, mdy = ny - mine.y;
+      const blockedByMine = (mdx * mdx) / (50 * 50) + ((mdy + 18) * (mdy + 18)) / (40 * 40) < 1;
+      if (!blockedByMine) {
+        g.x = Math.max(BORDER, Math.min(WORLD_W - BORDER, nx));
+        g.y = Math.max(BORDER, Math.min(WORLD_H - BORDER, ny));
+      }
+      g.facing = Math.cos(ang) < 0 ? 'left' : 'right';
+    } else {
+      g.state = 'idle';
+      // Slow idle sway
+      g.walkBob += 0.03;
+    }
+  }
+  // Remove dead golems
+  for (let i = golems.length - 1; i >= 0; i--) {
+    if (golems[i].health <= 0) {
+      // Death shard burst
+      for (let k = 0; k < 22; k++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = 1.5 + Math.random() * 3;
+        golems[i].shards.push({ x: golems[i].x, y: golems[i].y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 2, life: 40 + Math.floor(Math.random() * 15) });
+      }
+      triggerShake(14, 5);
+      // Leave orphan shards behind as a drifting particle pool on the golem itself, then drop it
+      golems.splice(i, 1);
+    }
+  }
+
+  // Advance walk animation + footstep SFX every ~21 frames of movement
+  if (dx !== 0 || dy !== 0) {
+    walkTimer++;
+    if (walkTimer % 21 === 0) playFootstep();
+  }
 
   // --- TROUBLED PERSON QUEST ---
   {
@@ -2925,6 +3289,7 @@ function update() {
             let hd = Math.hypot(wolf.x - projX, wolf.y - projY);
             if (hd < 25) {
               wolf.health--;
+              spawnFloater(wolf.x, wolf.y - 20, '-1', '#ffdd55');
               let kbAngle = Math.atan2(wolf.y - troubledPerson.y, wolf.x - troubledPerson.x);
               wolf.x += Math.cos(kbAngle) * 40;
               wolf.y += Math.sin(kbAngle) * 40;
@@ -4420,6 +4785,26 @@ function draw() {
     ctx.beginPath();
     ctx.arc(site.x, site.y, pulse2, 0, Math.PI * 2);
     ctx.stroke();
+
+    // Nearby hint: bouncing "!" when player is close
+    const pDist = Math.hypot(player.x - site.x, player.y - site.y);
+    if (pDist < 120) {
+      const bob = Math.sin(frameNow / 120) * 3;
+      const hintAlpha = Math.min(1, (120 - pDist) / 60);
+      ctx.save();
+      ctx.fillStyle = `rgba(0,0,0,${hintAlpha * 0.6})`;
+      ctx.beginPath();
+      ctx.ellipse(site.x, site.y - 50 + bob + 14, 6, 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.font = 'bold 22px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = `rgba(255,245,120,${hintAlpha})`;
+      ctx.strokeStyle = `rgba(0,0,0,${hintAlpha})`;
+      ctx.lineWidth = 3;
+      ctx.strokeText('!', site.x, site.y - 50 + bob);
+      ctx.fillText('!', site.x, site.y - 50 + bob);
+      ctx.restore();
+    }
   }
 
   // Followers
@@ -5150,6 +5535,8 @@ function draw() {
   // Wolves
   for (const wolf of wolves) {
     if (wolf.x < vpL - 40 || wolf.x > vpR + 40 || wolf.y < vpT - 40 || wolf.y > vpB + 40) continue;
+    // Inside the boss fight, suppress all non-boss wolves (rings + sprite)
+    if (_inBossFight && wolf.pack !== BOSS_PACK_ID && !wolf.bossMinion) continue;
     // Detection range circle (skipped for boss/minions — they own the whole arena)
     if (!inMainMenu && wolf.pack !== BOSS_PACK_ID) {
       if (wolf.state === 'chase') {
@@ -5530,6 +5917,186 @@ function draw() {
     }
   }
 
+  // --- AMBER GOLEMS ---
+  if (!_inBossFight) {
+    for (const g of golems) {
+      if (g.x < vpL - 60 || g.x > vpR + 60 || g.y < vpT - 60 || g.y > vpB + 60) continue;
+      const bob = Math.sin(g.walkBob) * 1.6;
+      const windupK = g.windupTimer > 0 ? (1 - g.windupTimer / 38) : 0;
+      const shake = g.hurtTimer > 0 ? (Math.random() - 0.5) * 2.5 : 0;
+      ctx.save();
+      ctx.translate(g.x + shake, g.y + bob + shake);
+      const flip = g.facing === 'left' ? -1 : 1;
+      ctx.scale(flip, 1);
+
+      // Shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.beginPath();
+      ctx.ellipse(0, 22, 18, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Resin drip on the ground (glow pool)
+      if (g.state === 'chase' || g.windupTimer > 0) {
+        ctx.fillStyle = 'rgba(240,168,56,0.25)';
+        ctx.beginPath();
+        ctx.ellipse(0, 22, 22, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Palette — hurt tints it red
+      const tint = g.hurtTimer > 0 ? 1 : 0;
+      const mix = (a, b, t) => Math.round(a + (b - a) * t);
+      const body = `rgb(${mix(208, 230, tint)},${mix(116, 70, tint)},${mix(24, 40, tint)})`;
+      const bodyDark = `rgb(${mix(160, 180, tint)},${mix(80, 40, tint)},${mix(8, 16, tint)})`;
+      const bodyLight = `rgb(${mix(240, 255, tint)},${mix(168, 110, tint)},${mix(56, 70, tint)})`;
+
+      // --- LEGS ---
+      ctx.fillStyle = bodyDark;
+      ctx.beginPath(); ctx.roundRect(-10, 6, 8, 16, 2); ctx.fill();
+      ctx.beginPath(); ctx.roundRect(2, 6, 8, 16, 2); ctx.fill();
+      ctx.fillStyle = body;
+      ctx.beginPath(); ctx.roundRect(-9, 6, 6, 12, 1.5); ctx.fill();
+      ctx.beginPath(); ctx.roundRect(3, 6, 6, 12, 1.5); ctx.fill();
+
+      // --- TORSO --- chunky trapezoid
+      ctx.fillStyle = body;
+      ctx.beginPath();
+      ctx.moveTo(-14, 8);
+      ctx.lineTo(-12, -12);
+      ctx.lineTo(12, -12);
+      ctx.lineTo(14, 8);
+      ctx.closePath();
+      ctx.fill();
+      // Torso highlight
+      ctx.fillStyle = bodyLight;
+      ctx.beginPath();
+      ctx.moveTo(-12, -10);
+      ctx.lineTo(-6, -10);
+      ctx.lineTo(-7, 4);
+      ctx.lineTo(-13, 4);
+      ctx.closePath();
+      ctx.fill();
+      // Torso shadow
+      ctx.fillStyle = bodyDark;
+      ctx.beginPath();
+      ctx.moveTo(6, -10);
+      ctx.lineTo(12, -11);
+      ctx.lineTo(14, 7);
+      ctx.lineTo(7, 5);
+      ctx.closePath();
+      ctx.fill();
+
+      // Resin cracks across torso
+      ctx.strokeStyle = 'rgba(60,30,0,0.55)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(-6, -8); ctx.lineTo(-3, -2); ctx.lineTo(-6, 5); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(4, -6); ctx.lineTo(8, 0); ctx.stroke();
+
+      // Glowing core crystal
+      const corePulse = 0.7 + Math.sin(frameNow / 200) * 0.3;
+      ctx.fillStyle = `rgba(255,220,120,${corePulse})`;
+      ctx.beginPath();
+      ctx.moveTo(0, -6);
+      ctx.lineTo(4, -2);
+      ctx.lineTo(0, 4);
+      ctx.lineTo(-4, -2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = `rgba(255,255,200,${corePulse * 0.9})`;
+      ctx.beginPath();
+      ctx.ellipse(-1, -2, 1.2, 1.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // --- ARMS --- raise during windup
+      const armY = -10 - windupK * 16;
+      const armX = 12;
+      const armBendY = 0 - windupK * 10;
+      // Back arm (behind torso)
+      ctx.fillStyle = bodyDark;
+      ctx.beginPath();
+      ctx.moveTo(-armX + 2, armY + 2);
+      ctx.lineTo(-armX - 6, armY + 2);
+      ctx.lineTo(-armX - 8, armBendY + 12);
+      ctx.lineTo(-armX - 2, armBendY + 12);
+      ctx.closePath();
+      ctx.fill();
+      // Front arm (big fist)
+      ctx.fillStyle = body;
+      ctx.beginPath();
+      ctx.moveTo(armX - 2, armY);
+      ctx.lineTo(armX + 8, armY);
+      ctx.lineTo(armX + 10, armBendY + 14);
+      ctx.lineTo(armX + 2, armBendY + 14);
+      ctx.closePath();
+      ctx.fill();
+      // Fist
+      ctx.fillStyle = bodyLight;
+      ctx.beginPath();
+      ctx.arc(armX + 6, armBendY + 14, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = bodyDark;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // --- HEAD --- blocky with glowing eyes
+      ctx.fillStyle = body;
+      ctx.beginPath();
+      ctx.roundRect(-8, -24, 16, 14, 3);
+      ctx.fill();
+      ctx.fillStyle = bodyLight;
+      ctx.beginPath();
+      ctx.roundRect(-7, -23, 6, 5, 1.5);
+      ctx.fill();
+      ctx.fillStyle = bodyDark;
+      ctx.beginPath();
+      ctx.roundRect(2, -15, 6, 4, 1);
+      ctx.fill();
+      // Eyes — brighter during windup
+      const eyeGlow = 0.6 + windupK * 0.4;
+      ctx.fillStyle = `rgba(255,240,140,${eyeGlow})`;
+      ctx.beginPath(); ctx.arc(-3, -17, 1.6, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(4, -17, 1.6, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = `rgba(255,255,220,${eyeGlow})`;
+      ctx.beginPath(); ctx.arc(-3, -17, 0.7, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(4, -17, 0.7, 0, Math.PI * 2); ctx.fill();
+
+      ctx.restore();
+
+      // Shards (world-space, no flip)
+      for (const sh of g.shards) {
+        const a = Math.min(1, sh.life / 20);
+        ctx.fillStyle = `rgba(240,168,56,${a})`;
+        ctx.beginPath();
+        ctx.arc(sh.x, sh.y, 1.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Windup telegraph ring
+      if (g.windupTimer > 0) {
+        const tP = 1 - g.windupTimer / 38;
+        ctx.strokeStyle = `rgba(255,180,60,${0.25 + tP * 0.5})`;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 4]);
+        ctx.beginPath();
+        ctx.arc(g.x, g.y + bob, GOLEM_ATTACK + 6, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // Health bar
+      if (g.health < g.maxHealth) {
+        const hbW = 30, hbH = 4;
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(g.x - hbW/2 - 1, g.y - 36, hbW + 2, hbH + 2);
+        ctx.fillStyle = '#333';
+        ctx.fillRect(g.x - hbW/2, g.y - 35, hbW, hbH);
+        const pct = g.health / g.maxHealth;
+        ctx.fillStyle = '#e08838';
+        ctx.fillRect(g.x - hbW/2, g.y - 35, hbW * pct, hbH);
+      }
+    }
+  }
+
   if (!inMainMenu) {
   // Escape-tunnel hole the miner dug (drawn under the miner)
   if (troubledPerson.active && troubledPerson.holeSize > 0) {
@@ -5762,7 +6329,29 @@ function draw() {
   }
   } // end !inMainMenu player block
 
+  // Floating damage / heal numbers (world space, above entities)
+  if (dmgFloaters.length) {
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'center';
+    for (const f of dmgFloaters) {
+      const alpha = Math.min(1, f.life / 30);
+      ctx.fillStyle = `rgba(0,0,0,${alpha * 0.55})`;
+      ctx.fillText(f.text, f.x + 1, f.y + 1);
+      const c = f.color;
+      const m = c.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+      const rgb = m ? `${parseInt(m[1],16)},${parseInt(m[2],16)},${parseInt(m[3],16)}` : '255,255,255';
+      ctx.fillStyle = `rgba(${rgb},${alpha})`;
+      ctx.fillText(f.text, f.x, f.y);
+    }
+  }
+
   ctx.restore();
+
+  // Screen flash (full-screen tint on hits / phase transitions)
+  if (screenFlash > 0) {
+    ctx.fillStyle = `rgba(${screenFlashColor},${screenFlash})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
 
   // Skip all HUD when rendering as menu background
   if (inMainMenu) return;
@@ -7115,6 +7704,7 @@ document.getElementById('save-btn').addEventListener('click', () => {
   pauseBtn.title = 'Pause';
   inMainMenu = true;
   document.getElementById('pause-btn').style.display = 'none';
+  document.getElementById('mute-btn').style.display = 'none';
   document.getElementById('fs-btn').style.display = 'none';
   document.getElementById('save-btn').style.display = 'none';
   document.getElementById('mobile-controls').style.display = 'none';
@@ -7529,9 +8119,11 @@ canvas.addEventListener('click', function mainMenuClick(e) {
     resetNewGame();
     inMainMenu = false;
     document.getElementById('pause-btn').style.display = '';
+    document.getElementById('mute-btn').style.display = '';
     document.getElementById('fs-btn').style.display = '';
     document.getElementById('save-btn').style.display = '';
     if (isMobile) document.getElementById('mobile-controls').style.display = 'flex';
+    runTutorialIfNew();
     return;
   }
 
@@ -7543,6 +8135,7 @@ canvas.addEventListener('click', function mainMenuClick(e) {
       notify('Save loaded! Welcome back.');
       inMainMenu = false;
       document.getElementById('pause-btn').style.display = '';
+      document.getElementById('mute-btn').style.display = '';
       document.getElementById('fs-btn').style.display = '';
       document.getElementById('save-btn').style.display = '';
       if (isMobile) document.getElementById('mobile-controls').style.display = 'flex';
@@ -7614,12 +8207,14 @@ window.addEventListener('keydown', e => {
       if (item === 'medkit') {
         if (player.health < player.maxHealth) {
           player.health = Math.min(player.maxHealth, player.health + 3);
+          spawnFloater(player.x, player.y - 24, '+3', '#66ff66');
           notify('Used Medkit! +3 HP');
           used = true;
         }
       } else if (item === 'food') {
         if (player.health < player.maxHealth) {
           player.health = Math.min(player.maxHealth, player.health + 1);
+          spawnFloater(player.x, player.y - 24, '+1', '#66ff66');
           notify('Ate Food! +1 HP');
           used = true;
         }
@@ -7713,6 +8308,32 @@ function resetNewGame() {
     let wy = BORDER + 50 + Math.random() * (WORLD_H - BORDER * 2 - 100);
     wolves.push({ x: wx, y: wy, angle: Math.random() * Math.PI * 2, speed: 1.2, state: 'wander', attackTimer: 0, facing: 'right', health: 3, maxHealth: 3, pack: -1 });
   }
+  // Reset golems — heal + redistribute around mine
+  for (const g of golems) {
+    g.health = g.maxHealth;
+    g.state = 'idle';
+    g.attackTimer = 0;
+    g.windupTimer = 0;
+    g.hurtTimer = 0;
+    g.shards.length = 0;
+    const ang = Math.random() * Math.PI * 2;
+    const rad = 180 + Math.random() * 140;
+    g.x = Math.max(BORDER, Math.min(WORLD_W - BORDER, mine.x + Math.cos(ang) * rad));
+    g.y = Math.max(BORDER, Math.min(WORLD_H - BORDER, mine.y + Math.sin(ang) * rad));
+  }
+  // Respawn any dead golems (keep 2)
+  while (golems.length < 2) {
+    const ang = Math.random() * Math.PI * 2;
+    const rad = 180 + Math.random() * 140;
+    golems.push({
+      x: Math.max(BORDER, Math.min(WORLD_W - BORDER, mine.x + Math.cos(ang) * rad)),
+      y: Math.max(BORDER, Math.min(WORLD_H - BORDER, mine.y + Math.sin(ang) * rad)),
+      angle: Math.random() * Math.PI * 2, speed: 0.55, state: 'idle',
+      attackTimer: 0, windupTimer: 0, facing: 'right',
+      health: 7, maxHealth: 7, hurtTimer: 0,
+      walkBob: Math.random() * Math.PI * 2, shards: []
+    });
+  }
 }
 
 function togglePause() {
@@ -7721,6 +8342,505 @@ function togglePause() {
   pauseBtn.title = paused ? 'Resume' : 'Pause';
   pauseOverlay.classList.toggle('active', paused);
 }
+
+// --- PROCEDURAL MUSIC (Web Audio) ---
+let musicCtx = null;
+let musicMasterGain = null;
+let musicMuted = (() => { try { return localStorage.getItem('jrv_muted') === '1'; } catch (e) { return false; } })();
+let musicVolume = (() => { try { const v = parseFloat(localStorage.getItem('jrv_vol')); return isFinite(v) ? Math.min(1, Math.max(0, v)) : 1; } catch (e) { return 1; } })();
+let currentMusicTrack = null;
+let musicScheduleAt = 0;
+let musicNoteIndex = 0;
+let musicSchedulerId = null;
+
+const NOTE_FREQ = {
+  C2: 65.41,  D2: 73.42,  E2: 82.41,  F2: 87.31,  G2: 98.00,  A2: 110.00, B2: 123.47,
+  C3: 130.81, D3: 146.83, E3: 164.81, F3: 174.61, G3: 196.00, A3: 220.00, B3: 246.94,
+  C4: 261.63, D4: 293.66, E4: 329.63, F4: 349.23, G4: 392.00, A4: 440.00, B4: 493.88,
+  C5: 523.25, D5: 587.33, E5: 659.25, F5: 698.46, G5: 783.99, A5: 880.00, B5: 987.77,
+  C6: 1046.50, D6: 1174.66, E6: 1318.51, F6: 1396.91, G6: 1567.98
+};
+
+// 32-step patterns, step = half beat. DKC SNES jungle vibe —
+// steel-drum hook with delay tap, chord pads, bongos/woodblock, bird calls.
+// conga: 1 = low, 2 = high
+const MUSIC_TRACKS = {
+  explore: {
+    bpm: 152,
+    steps: 32,
+    // Adventurous hook over Am - F - C - G (one octave lower)
+    melody: ['A2','C3','E3','A3','G3','E3','C3','A2',
+             'F3','A3','C4','A3','G3','F3','E3','C3',
+             'E3','G3','C4','B3','A3','G3','E3','C3',
+             'D3','G3','B3','D4','B3','G3','D3','B2'],
+    // Walking bass tracing the Am-F-C-G progression (one octave lower)
+    bass:   ['A2','E3','A2','E3','A2','E3','A2','E3',
+             'F2','C3','F2','C3','F2','C3','F2','C3',
+             'C2','G2','C3','G2','C2','G2','C3','G2',
+             'G2','D3','G2','D3','G2','D3','G2','D3'],
+    // Bar-length chord pads (Am - F - C - G)
+    chord:  ['A3m',null,null,null,null,null,null,null,
+             'F3', null,null,null,null,null,null,null,
+             'C3', null,null,null,null,null,null,null,
+             'G3', null,null,null,null,null,null,null],
+    // Half-time kick: beats 1 and 3 only
+    kick:   [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0],
+    shaker: [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    // High conga on beat 3 (half-time backbeat)
+    conga:  [0,0,0,0,2,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,2,0,0,0],
+    // Woodblock on off-beats (beats 2 and 4) for extra groove
+    wood:   [0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0],
+    // Scattered jungle bird calls — more lively canopy
+    bird:   [0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,1,0,0,1],
+    // Occasional distant monkey hoot
+    monkey: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    // Gene Krupa "Sing, Sing, Sing" tribal tom groove (1=low, 2=high accent)
+    tom:    [1,1,2,0,1,2,1,0, 1,1,2,0,1,2,1,0, 1,1,2,0,1,2,1,0, 1,1,2,0,1,2,1,2]
+  },
+  boss: {
+    bpm: 196,
+    steps: 32,
+    // Darker boss hook over Am - Dm - F - G (one octave lower)
+    melody: ['A2','E3','A3','C4','A3','G3','E3','C3',
+             'D3','F3','A3','D4','A3','F3','D3','A2',
+             'F3','A3','C4','F4','C4','A3','F3','C3',
+             'G3','B3','D4','G4','D4','B3','G3','D3'],
+    // Driving bass — roots and fifths (one octave lower)
+    bass:   ['A2','E3','A2','E3','A2','E3','A2','E3',
+             'D2','A2','D2','A2','D2','A2','D2','A2',
+             'F2','C3','F2','C3','F2','C3','F2','C3',
+             'G2','D3','G2','D3','G2','D3','G2','D3'],
+    // Bar-length chord pads (Am - Dm - F - G)
+    chord:  ['A3m',null,null,null,null,null,null,null,
+             'D3m',null,null,null,null,null,null,null,
+             'F3', null,null,null,null,null,null,null,
+             'G3', null,null,null,null,null,null,null],
+    // Relentless four-on-the-floor boss kick with syncopated fills
+    kick:   [1,0,1,0,1,0,1,1,1,0,1,0,1,0,1,1,1,0,1,0,1,0,1,1,1,0,1,0,1,1,1,1],
+    shaker: [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    // Two-tone conga — high on beat 3, low on off-beats
+    conga:  [0,0,1,0,2,0,1,0,0,0,1,0,2,0,1,0,0,0,1,0,2,0,1,0,0,0,1,0,2,0,1,0],
+    // Woodblock on beats 2 and 4
+    wood:   [0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0],
+    // Sparse, tense bird shrieks for the boss encounter
+    bird:   [0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1],
+    monkey: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0],
+    // Pounding Krupa tom barrage — no rests during the boss fight
+    tom:    [2,1,2,1,2,2,1,2, 1,2,1,2,1,2,1,2, 2,1,2,1,2,2,1,2, 1,2,1,2,2,1,2,2]
+  }
+};
+
+function playMarimba(freq, when, dur, vol) {
+  if (!musicCtx) return;
+  const osc = musicCtx.createOscillator();
+  const osc2 = musicCtx.createOscillator();
+  const gain = musicCtx.createGain();
+  osc.type = 'triangle';
+  osc2.type = 'sine';
+  osc.frequency.value = freq;
+  osc2.frequency.value = freq * 2.01;
+  const peak = vol != null ? vol : 0.22;
+  gain.gain.setValueAtTime(0, when);
+  gain.gain.linearRampToValueAtTime(peak, when + 0.004);
+  // Short, snappy decay for a marimba/steel-drum pop
+  gain.gain.exponentialRampToValueAtTime(0.001, when + Math.min(dur, 0.38));
+  osc.connect(gain);
+  osc2.connect(gain);
+  gain.connect(musicMasterGain);
+  osc.start(when);
+  osc2.start(when);
+  osc.stop(when + dur + 0.1);
+  osc2.stop(when + dur + 0.1);
+}
+
+// Atmospheric chord pad — triad via three detuned sawtooth oscillators
+function playPad(rootFreq, when, dur, minor) {
+  if (!musicCtx) return;
+  const ratios = minor
+    ? [1, 1.1892, 1.4983]  // root, minor third, perfect fifth
+    : [1, 1.2599, 1.4983]; // root, major third, perfect fifth
+  const gain = musicCtx.createGain();
+  const filt = musicCtx.createBiquadFilter();
+  filt.type = 'lowpass';
+  filt.frequency.value = 1100;
+  filt.Q.value = 0.7;
+  gain.gain.setValueAtTime(0, when);
+  gain.gain.linearRampToValueAtTime(0.06, when + 0.12);
+  gain.gain.linearRampToValueAtTime(0.06, when + dur - 0.12);
+  gain.gain.linearRampToValueAtTime(0, when + dur);
+  const oscs = [];
+  for (let i = 0; i < 3; i++) {
+    const osc = musicCtx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.value = rootFreq * ratios[i];
+    osc.detune.value = (i - 1) * 6;
+    osc.connect(filt);
+    oscs.push(osc);
+  }
+  filt.connect(gain).connect(musicMasterGain);
+  for (const osc of oscs) {
+    osc.start(when);
+    osc.stop(when + dur + 0.05);
+  }
+}
+
+function playBass(freq, when, dur) {
+  if (!musicCtx) return;
+  const osc = musicCtx.createOscillator();
+  const filt = musicCtx.createBiquadFilter();
+  const gain = musicCtx.createGain();
+  osc.type = 'sawtooth';
+  osc.frequency.value = freq;
+  filt.type = 'lowpass';
+  filt.frequency.value = 500;
+  gain.gain.setValueAtTime(0, when);
+  gain.gain.linearRampToValueAtTime(0.12, when + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.001, when + dur);
+  osc.connect(filt).connect(gain).connect(musicMasterGain);
+  osc.start(when);
+  osc.stop(when + dur + 0.1);
+}
+
+function playKick(when) {
+  if (!musicCtx) return;
+  const osc = musicCtx.createOscillator();
+  const gain = musicCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(140, when);
+  osc.frequency.exponentialRampToValueAtTime(45, when + 0.12);
+  gain.gain.setValueAtTime(0, when);
+  gain.gain.linearRampToValueAtTime(0.22, when + 0.005);
+  gain.gain.exponentialRampToValueAtTime(0.001, when + 0.22);
+  osc.connect(gain).connect(musicMasterGain);
+  osc.start(when);
+  osc.stop(when + 0.25);
+}
+
+// Short jungle bird chirp — randomized pitch for species variety
+function playBird(when) {
+  if (!musicCtx) return;
+  const osc = musicCtx.createOscillator();
+  const gain = musicCtx.createGain();
+  osc.type = 'sine';
+  const base = 1500 + Math.random() * 1400;
+  const hop = 300 + Math.random() * 500;
+  osc.frequency.setValueAtTime(base, when);
+  osc.frequency.linearRampToValueAtTime(base + hop, when + 0.04);
+  osc.frequency.linearRampToValueAtTime(base + hop * 0.4, when + 0.08);
+  osc.frequency.linearRampToValueAtTime(base + hop * 1.2, when + 0.12);
+  gain.gain.setValueAtTime(0, when);
+  gain.gain.linearRampToValueAtTime(0.06, when + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.001, when + 0.16);
+  osc.connect(gain).connect(musicMasterGain);
+  osc.start(when);
+  osc.stop(when + 0.2);
+}
+
+// Soft footstep — short filtered noise burst with random pitch
+function playFootstep() {
+  if (!musicCtx || !musicMasterGain) return;
+  const when = musicCtx.currentTime;
+  const bufSize = Math.floor(musicCtx.sampleRate * 0.05);
+  const buf = musicCtx.createBuffer(1, bufSize, musicCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufSize);
+  const src = musicCtx.createBufferSource();
+  src.buffer = buf;
+  const filt = musicCtx.createBiquadFilter();
+  filt.type = 'lowpass';
+  filt.frequency.value = 1200 + Math.random() * 800;
+  filt.Q.value = 2;
+  const g = musicCtx.createGain();
+  g.gain.setValueAtTime(0.08, when);
+  g.gain.exponentialRampToValueAtTime(0.001, when + 0.07);
+  src.connect(filt).connect(g).connect(musicMasterGain);
+  src.start(when);
+}
+
+// Boss-intro stinger: timpani roll swelling into a cymbal crash
+function playBossStinger() {
+  if (!musicCtx) return;
+  const now = musicCtx.currentTime;
+  // Timpani roll — 24 rapid tom hits with accelerating/growing volume
+  const rollDur = 1.4;
+  const hits = 28;
+  for (let i = 0; i < hits; i++) {
+    const t = now + (i / hits) * rollDur;
+    const osc = musicCtx.createOscillator();
+    const g = musicCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(90, t);
+    osc.frequency.exponentialRampToValueAtTime(55, t + 0.14);
+    const peak = 0.18 + (i / hits) * 0.22;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(peak, t + 0.003);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+    osc.connect(g).connect(musicMasterGain);
+    osc.start(t);
+    osc.stop(t + 0.22);
+  }
+  // Cymbal crash — filtered white noise burst
+  const crashAt = now + rollDur;
+  const bufSize = Math.floor(musicCtx.sampleRate * 1.4);
+  const buf = musicCtx.createBuffer(1, bufSize, musicCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1);
+  const src = musicCtx.createBufferSource();
+  src.buffer = buf;
+  const filt = musicCtx.createBiquadFilter();
+  filt.type = 'highpass';
+  filt.frequency.value = 5000;
+  const cg = musicCtx.createGain();
+  cg.gain.setValueAtTime(0, crashAt);
+  cg.gain.linearRampToValueAtTime(0.45, crashAt + 0.01);
+  cg.gain.exponentialRampToValueAtTime(0.001, crashAt + 1.3);
+  src.connect(filt).connect(cg).connect(musicMasterGain);
+  src.start(crashAt);
+  // Low boom under the crash
+  const boom = musicCtx.createOscillator();
+  const bg = musicCtx.createGain();
+  boom.type = 'sine';
+  boom.frequency.setValueAtTime(80, crashAt);
+  boom.frequency.exponentialRampToValueAtTime(35, crashAt + 0.4);
+  bg.gain.setValueAtTime(0, crashAt);
+  bg.gain.linearRampToValueAtTime(0.35, crashAt + 0.01);
+  bg.gain.exponentialRampToValueAtTime(0.001, crashAt + 0.6);
+  boom.connect(bg).connect(musicMasterGain);
+  boom.start(crashAt);
+  boom.stop(crashAt + 0.7);
+}
+
+// Tribal tom — Gene Krupa "Sing, Sing, Sing" flavor. high=accented high tom
+function playTom(when, high) {
+  if (!musicCtx) return;
+  const osc = musicCtx.createOscillator();
+  const gain = musicCtx.createGain();
+  osc.type = 'sine';
+  const startF = high ? 210 : 150;
+  const endF = high ? 95 : 70;
+  osc.frequency.setValueAtTime(startF, when);
+  osc.frequency.exponentialRampToValueAtTime(endF, when + 0.18);
+  const peak = high ? 0.26 : 0.2;
+  gain.gain.setValueAtTime(0, when);
+  gain.gain.linearRampToValueAtTime(peak, when + 0.004);
+  gain.gain.exponentialRampToValueAtTime(0.001, when + 0.28);
+  // Noisy attack click for stick impact
+  const bufSize = Math.floor(musicCtx.sampleRate * 0.015);
+  const buf = musicCtx.createBuffer(1, bufSize, musicCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufSize);
+  const src = musicCtx.createBufferSource();
+  src.buffer = buf;
+  const ngain = musicCtx.createGain();
+  ngain.gain.value = high ? 0.12 : 0.09;
+  osc.connect(gain).connect(musicMasterGain);
+  src.connect(ngain).connect(musicMasterGain);
+  osc.start(when);
+  osc.stop(when + 0.32);
+  src.start(when);
+}
+
+// Distant monkey hoot — low warble
+function playMonkey(when) {
+  if (!musicCtx) return;
+  const osc = musicCtx.createOscillator();
+  const filt = musicCtx.createBiquadFilter();
+  const gain = musicCtx.createGain();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(180, when);
+  osc.frequency.linearRampToValueAtTime(260, when + 0.08);
+  osc.frequency.linearRampToValueAtTime(200, when + 0.18);
+  filt.type = 'bandpass';
+  filt.frequency.value = 700;
+  filt.Q.value = 4;
+  gain.gain.setValueAtTime(0, when);
+  gain.gain.linearRampToValueAtTime(0.09, when + 0.03);
+  gain.gain.linearRampToValueAtTime(0.07, when + 0.15);
+  gain.gain.exponentialRampToValueAtTime(0.001, when + 0.32);
+  osc.connect(filt).connect(gain).connect(musicMasterGain);
+  osc.start(when);
+  osc.stop(when + 0.36);
+}
+
+// Hollow woodblock — triangle with super short decay, good for jungle accents
+function playWoodblock(when) {
+  if (!musicCtx) return;
+  const osc = musicCtx.createOscillator();
+  const gain = musicCtx.createGain();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(900, when);
+  osc.frequency.exponentialRampToValueAtTime(600, when + 0.03);
+  gain.gain.setValueAtTime(0, when);
+  gain.gain.linearRampToValueAtTime(0.14, when + 0.002);
+  gain.gain.exponentialRampToValueAtTime(0.001, when + 0.06);
+  osc.connect(gain).connect(musicMasterGain);
+  osc.start(when);
+  osc.stop(when + 0.08);
+}
+
+function playConga(when, high) {
+  if (!musicCtx) return;
+  const osc = musicCtx.createOscillator();
+  const gain = musicCtx.createGain();
+  osc.type = 'sine';
+  let startF = high ? 360 : 260;
+  let endF = high ? 180 : 130;
+  osc.frequency.setValueAtTime(startF, when);
+  osc.frequency.exponentialRampToValueAtTime(endF, when + 0.08);
+  gain.gain.setValueAtTime(0, when);
+  gain.gain.linearRampToValueAtTime(0.2, when + 0.002);
+  gain.gain.exponentialRampToValueAtTime(0.001, when + 0.14);
+  // A touch of noise click for attack
+  const bufSize = Math.floor(musicCtx.sampleRate * 0.01);
+  const buf = musicCtx.createBuffer(1, bufSize, musicCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufSize);
+  const src = musicCtx.createBufferSource();
+  src.buffer = buf;
+  const ngain = musicCtx.createGain();
+  ngain.gain.value = 0.08;
+  osc.connect(gain).connect(musicMasterGain);
+  src.connect(ngain).connect(musicMasterGain);
+  osc.start(when);
+  osc.stop(when + 0.16);
+  src.start(when);
+}
+
+function playShaker(when) {
+  if (!musicCtx) return;
+  const bufSize = Math.floor(musicCtx.sampleRate * 0.06);
+  const buf = musicCtx.createBuffer(1, bufSize, musicCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
+  const src = musicCtx.createBufferSource();
+  src.buffer = buf;
+  const filt = musicCtx.createBiquadFilter();
+  filt.type = 'highpass';
+  filt.frequency.value = 6500;
+  const gain = musicCtx.createGain();
+  gain.gain.setValueAtTime(0.065, when);
+  gain.gain.exponentialRampToValueAtTime(0.001, when + 0.05);
+  src.connect(filt).connect(gain).connect(musicMasterGain);
+  src.start(when);
+}
+
+function scheduleMusic() {
+  if (!musicCtx || !currentMusicTrack) return;
+  const track = MUSIC_TRACKS[currentMusicTrack];
+  const stepDur = 30 / track.bpm; // half-beat in seconds
+  const lookahead = 0.25;
+  while (musicScheduleAt < musicCtx.currentTime + lookahead) {
+    const i = musicNoteIndex % track.steps;
+    if (track.melody[i]) {
+      const f = NOTE_FREQ[track.melody[i]];
+      playMarimba(f, musicScheduleAt, stepDur * 1.4, 0.22);
+      // Delay tap (DKC-style echo) 1.5 steps later at half volume
+      playMarimba(f, musicScheduleAt + stepDur * 1.5, stepDur * 0.8, 0.09);
+    }
+    if (track.bass[i])   playBass(NOTE_FREQ[track.bass[i]],   musicScheduleAt, stepDur * 1.8);
+    if (track.kick[i])   playKick(musicScheduleAt);
+    if (track.shaker[i]) playShaker(musicScheduleAt);
+    if (track.conga && track.conga[i]) playConga(musicScheduleAt, track.conga[i] === 2);
+    if (track.wood && track.wood[i]) playWoodblock(musicScheduleAt);
+    if (track.chord && track.chord[i]) {
+      let name = track.chord[i];
+      let minor = false;
+      if (name.endsWith('m')) { minor = true; name = name.slice(0, -1); }
+      playPad(NOTE_FREQ[name], musicScheduleAt, stepDur * 8, minor);
+    }
+    if (track.bird && track.bird[i]) playBird(musicScheduleAt);
+    if (track.monkey && track.monkey[i]) playMonkey(musicScheduleAt);
+    if (track.tom && track.tom[i]) playTom(musicScheduleAt, track.tom[i] === 2);
+    musicScheduleAt += stepDur;
+    musicNoteIndex++;
+  }
+}
+
+function musicTargetVolume() {
+  if (musicMuted) return 0;
+  const base = currentMusicTrack === 'boss' ? 0.55 : 0.35;
+  return base * musicVolume;
+}
+
+function setMusicVolume(v) {
+  musicVolume = Math.min(1, Math.max(0, v));
+  try { localStorage.setItem('jrv_vol', String(musicVolume)); } catch (e) {}
+  if (musicMasterGain) musicMasterGain.gain.value = musicTargetVolume();
+}
+
+function startMusicTrack(name) {
+  if (!musicCtx || currentMusicTrack === name) return;
+  currentMusicTrack = name;
+  musicNoteIndex = 0;
+  musicScheduleAt = musicCtx.currentTime + 0.1;
+  if (musicMasterGain) {
+    const now = musicCtx.currentTime;
+    const target = musicTargetVolume();
+    musicMasterGain.gain.cancelScheduledValues(now);
+    musicMasterGain.gain.setValueAtTime(musicMasterGain.gain.value, now);
+    musicMasterGain.gain.linearRampToValueAtTime(target, now + 0.4);
+  }
+}
+
+function initMusic() {
+  if (musicCtx) return;
+  try {
+    musicCtx = new (window.AudioContext || window.webkitAudioContext)();
+  } catch (e) { return; }
+  musicMasterGain = musicCtx.createGain();
+  musicMasterGain.gain.value = musicTargetVolume();
+  musicMasterGain.connect(musicCtx.destination);
+  startMusicTrack('explore');
+  musicSchedulerId = setInterval(scheduleMusic, 25);
+  // Sync mute button UI with persisted state
+  const muteBtn = document.getElementById('mute-btn');
+  if (muteBtn) {
+    const icon = muteBtn.querySelector('.speaker-svg');
+    if (icon) icon.classList.toggle('muted', musicMuted);
+    muteBtn.title = musicMuted ? 'Unmute music' : 'Mute music';
+  }
+}
+
+function setMusicMuted(muted) {
+  musicMuted = muted;
+  try { localStorage.setItem('jrv_muted', muted ? '1' : '0'); } catch (e) {}
+  if (musicMasterGain) musicMasterGain.gain.value = musicTargetVolume();
+  const muteBtn = document.getElementById('mute-btn');
+  if (muteBtn) {
+    const icon = muteBtn.querySelector('.speaker-svg');
+    if (icon) icon.classList.toggle('muted', muted);
+    muteBtn.title = muted ? 'Unmute music' : 'Mute music';
+  }
+}
+
+// Start on first user interaction (browser autoplay policy)
+window.addEventListener('keydown', initMusic, { once: true });
+window.addEventListener('pointerdown', initMusic, { once: true });
+
+// M key toggles mute
+window.addEventListener('keydown', e => {
+  if (e.key === 'm' || e.key === 'M') {
+    setMusicMuted(!musicMuted);
+    notify(musicMuted ? 'Music muted (M to unmute)' : 'Music on (M to mute)');
+  }
+});
+
+// Mute button click (desktop + mobile)
+document.getElementById('mute-btn').addEventListener('click', () => {
+  initMusic();
+  setMusicMuted(!musicMuted);
+});
+
+// Volume slider in pause menu
+(function() {
+  const slider = document.getElementById('vol-slider');
+  if (!slider) return;
+  slider.value = String(Math.round(musicVolume * 100));
+  slider.addEventListener('input', () => {
+    initMusic();
+    setMusicVolume(parseInt(slider.value, 10) / 100);
+  });
+})();
 
 // --- MOBILE TOUCH CONTROLS ---
 const isMobile = ('ontouchstart' in window) && window.matchMedia('(pointer: coarse)').matches;
@@ -7882,6 +9002,7 @@ if (isMobile) {
         let dist = Math.hypot(wolf.x - projX, wolf.y - projY);
         if (dist < 25) {
           wolf.health--;
+          spawnFloater(wolf.x, wolf.y - 20, '-1', '#ffdd55');
           let kbAngle = Math.atan2(wolf.y - player.y, wolf.x - player.x);
           wolf.x += Math.cos(kbAngle) * 40;
           wolf.y += Math.sin(kbAngle) * 40;
@@ -7889,6 +9010,25 @@ if (isMobile) {
           wolf.y = Math.max(BORDER, Math.min(WORLD_H - BORDER, wolf.y));
           wolf.state = 'wander';
           wolf.angle = kbAngle;
+        }
+      }
+      // Mobile whip hits golems
+      for (const g of golems) {
+        const wddx = whip.endX - whip.x;
+        const wddy = whip.endY - whip.y;
+        const len2 = wddx * wddx + wddy * wddy;
+        const t = Math.max(0, Math.min(1, ((g.x - whip.x) * wddx + (g.y - whip.y) * wddy) / len2));
+        const projX = whip.x + t * wddx;
+        const projY = whip.y + t * wddy;
+        if (Math.hypot(g.x - projX, g.y - projY) < 30 && g.hurtTimer <= 0) {
+          g.health--;
+          g.hurtTimer = 14;
+          spawnFloater(g.x, g.y - 28, '-1', '#ffb055');
+          for (let k = 0; k < 6; k++) {
+            const a = Math.random() * Math.PI * 2;
+            const sp = 1 + Math.random() * 2;
+            g.shards.push({ x: g.x + (Math.random() - 0.5) * 12, y: g.y + (Math.random() - 0.5) * 20, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 1, life: 18 + Math.floor(Math.random() * 8) });
+          }
         }
       }
     }

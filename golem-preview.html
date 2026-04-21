@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Amber Golem Preview</title>
+<style>
+  body { margin: 0; background: #1a1a1a; color: #eee; font: 14px Arial; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+  canvas { background: #3a5a2a; border: 2px solid #555; border-radius: 6px; }
+  p { max-width: 720px; text-align: center; line-height: 1.5; color: #ccc; }
+  h2 { color: #ffd84a; }
+  .labels { display: flex; justify-content: space-around; width: 720px; margin-top: 8px; color: #ffd84a; font-weight: bold; }
+</style>
+</head>
+<body>
+<h2>Amber Golem — Preview</h2>
+<p>Four states shown at 3× scale so you can see the sprite. From left: <b>idle</b>, <b>chasing</b>, <b>windup</b> (slam telegraph ring), <b>after slam</b> (shards flying).</p>
+<canvas id="c" width="720" height="260"></canvas>
+<div class="labels">
+  <span>Idle</span><span>Chase</span><span>Windup</span><span>Slam!</span>
+</div>
+<p style="margin-top: 16px"><b>Behavior:</b> 7 HP (vs 3 for a wolf). Speed 0.55 (less than half a wolf's). Detection range 230px. Attack range 48px. Windup is 38 frames (~0.6s) — the dashed ring gives you time to dodge. Slam does 2 damage with knockback (tradeoff for being slow), plus shards pop out. During the boss fight, any golem inside the arena is teleported safely out.</p>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let frameNow = 0;
+
+function drawGolem(cx, cy, scale, state, windupProgress) {
+  const bob = state === 'idle' ? Math.sin(frameNow / 400) * 1.2 : Math.sin(frameNow / 120) * 1.8;
+  const windupK = state === 'windup' ? windupProgress : (state === 'slam' ? 1 : 0);
+  ctx.save();
+  ctx.translate(cx, cy + bob);
+  ctx.scale(scale, scale);
+
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.beginPath();
+  ctx.ellipse(0, 22, 18, 5, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Glow pool when active
+  if (state === 'chase' || state === 'windup' || state === 'slam') {
+    ctx.fillStyle = 'rgba(240,168,56,0.25)';
+    ctx.beginPath();
+    ctx.ellipse(0, 22, 22, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const body = 'rgb(208,116,24)';
+  const bodyDark = 'rgb(160,80,8)';
+  const bodyLight = 'rgb(240,168,56)';
+
+  // LEGS
+  ctx.fillStyle = bodyDark;
+  ctx.beginPath(); ctx.roundRect(-10, 6, 8, 16, 2); ctx.fill();
+  ctx.beginPath(); ctx.roundRect(2, 6, 8, 16, 2); ctx.fill();
+  ctx.fillStyle = body;
+  ctx.beginPath(); ctx.roundRect(-9, 6, 6, 12, 1.5); ctx.fill();
+  ctx.beginPath(); ctx.roundRect(3, 6, 6, 12, 1.5); ctx.fill();
+
+  // TORSO
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.moveTo(-14, 8); ctx.lineTo(-12, -12); ctx.lineTo(12, -12); ctx.lineTo(14, 8);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = bodyLight;
+  ctx.beginPath();
+  ctx.moveTo(-12, -10); ctx.lineTo(-6, -10); ctx.lineTo(-7, 4); ctx.lineTo(-13, 4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = bodyDark;
+  ctx.beginPath();
+  ctx.moveTo(6, -10); ctx.lineTo(12, -11); ctx.lineTo(14, 7); ctx.lineTo(7, 5);
+  ctx.closePath();
+  ctx.fill();
+
+  // Cracks
+  ctx.strokeStyle = 'rgba(60,30,0,0.55)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(-6, -8); ctx.lineTo(-3, -2); ctx.lineTo(-6, 5); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(4, -6); ctx.lineTo(8, 0); ctx.stroke();
+
+  // Core crystal
+  const corePulse = 0.7 + Math.sin(frameNow / 200) * 0.3;
+  ctx.fillStyle = `rgba(255,220,120,${corePulse})`;
+  ctx.beginPath();
+  ctx.moveTo(0, -6); ctx.lineTo(4, -2); ctx.lineTo(0, 4); ctx.lineTo(-4, -2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = `rgba(255,255,200,${corePulse * 0.9})`;
+  ctx.beginPath();
+  ctx.ellipse(-1, -2, 1.2, 1.6, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ARMS — raise during windup
+  const armY = -10 - windupK * 16;
+  const armX = 12;
+  const armBendY = 0 - windupK * 10;
+  ctx.fillStyle = bodyDark;
+  ctx.beginPath();
+  ctx.moveTo(-armX + 2, armY + 2); ctx.lineTo(-armX - 6, armY + 2);
+  ctx.lineTo(-armX - 8, armBendY + 12); ctx.lineTo(-armX - 2, armBendY + 12);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.moveTo(armX - 2, armY); ctx.lineTo(armX + 8, armY);
+  ctx.lineTo(armX + 10, armBendY + 14); ctx.lineTo(armX + 2, armBendY + 14);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = bodyLight;
+  ctx.beginPath();
+  ctx.arc(armX + 6, armBendY + 14, 5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = bodyDark;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // HEAD
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.roundRect(-8, -24, 16, 14, 3);
+  ctx.fill();
+  ctx.fillStyle = bodyLight;
+  ctx.beginPath();
+  ctx.roundRect(-7, -23, 6, 5, 1.5);
+  ctx.fill();
+  ctx.fillStyle = bodyDark;
+  ctx.beginPath();
+  ctx.roundRect(2, -15, 6, 4, 1);
+  ctx.fill();
+  const eyeGlow = 0.6 + windupK * 0.4;
+  ctx.fillStyle = `rgba(255,240,140,${eyeGlow})`;
+  ctx.beginPath(); ctx.arc(-3, -17, 1.6, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(4, -17, 1.6, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = `rgba(255,255,220,${eyeGlow})`;
+  ctx.beginPath(); ctx.arc(-3, -17, 0.7, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(4, -17, 0.7, 0, Math.PI * 2); ctx.fill();
+
+  ctx.restore();
+}
+
+// Simulated shards for "slam" preview
+const shards = [];
+function spawnSlamShards(cx, cy) {
+  for (let k = 0; k < 10; k++) {
+    const a = Math.random() * Math.PI * 2;
+    const sp = 1.4 + Math.random() * 2.4;
+    shards.push({ x: cx, y: cy + 16, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 1.8, life: 40 });
+  }
+}
+let slamTimer = 0;
+
+function tick() {
+  frameNow = performance.now();
+  ctx.fillStyle = '#3a5a2a';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Ground tufts
+  for (let i = 0; i < 120; i++) {
+    const gx = (i * 97 + (i * i) * 13) % canvas.width;
+    const gy = ((i * 131) ^ (i * 7)) % canvas.height;
+    const shade = 60 + (i * 17) % 50;
+    ctx.fillStyle = `rgba(${shade + 20},${shade + 60},${shade},0.55)`;
+    ctx.fillRect(gx, gy, 2, 3);
+  }
+
+  const scale = 3;
+  const positions = [90, 270, 450, 630];
+  const y = 150;
+
+  // Idle
+  drawGolem(positions[0], y, scale, 'idle', 0);
+  // Chase
+  drawGolem(positions[1], y, scale, 'chase', 0);
+  // Windup — cycle the progress 0→1 over 1.5s
+  const wProg = (Math.sin(frameNow / 500) + 1) / 2;
+  drawGolem(positions[2], y, scale, 'windup', wProg);
+  // Windup telegraph ring
+  ctx.strokeStyle = `rgba(255,180,60,${0.25 + wProg * 0.5})`;
+  ctx.lineWidth = 3;
+  ctx.setLineDash([6, 5]);
+  ctx.beginPath();
+  ctx.arc(positions[2], y + 10, (48 + 6) * scale * 0.45, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Slam — periodic eruption
+  slamTimer++;
+  if (slamTimer > 90) {
+    spawnSlamShards(positions[3], y);
+    slamTimer = 0;
+  }
+  drawGolem(positions[3], y, scale, 'slam', 1);
+  // Update + draw shards
+  for (let i = shards.length - 1; i >= 0; i--) {
+    const sh = shards[i];
+    sh.x += sh.vx; sh.y += sh.vy;
+    sh.vy += 0.18;
+    sh.life--;
+    const a = Math.min(1, sh.life / 20);
+    ctx.fillStyle = `rgba(240,168,56,${a})`;
+    ctx.beginPath();
+    ctx.arc(sh.x, sh.y, 2.4, 0, Math.PI * 2);
+    ctx.fill();
+    if (sh.life <= 0) shards.splice(i, 1);
+  }
+
+  // State captions
+  ctx.fillStyle = '#ffd84a';
+  ctx.font = 'bold 12px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('HP 7/7  •  slow wander', positions[0], 240);
+  ctx.fillText('eyes dim  •  lumbering', positions[1], 240);
+  ctx.fillText('arms raised  •  ring pulses', positions[2], 240);
+  ctx.fillText('shards erupt  •  2 dmg AoE', positions[3], 240);
+
+  requestAnimationFrame(tick);
+}
+tick();
+</script>
+</body>
+</html>
